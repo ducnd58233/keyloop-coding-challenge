@@ -1,0 +1,27 @@
+# Build output
+bin/
+dist/
+
+# Test and coverage
+coverage.out
+coverage.html
+
+# Local environment
+.env
+.env.local
+
+# Logs and scratch
+*.log
+/tmp/
+
+# Local database files
+*.db
+*.db-shm
+*.db-wal
+
+# Agent runtime state
+/.agent-state/
+
+# OS
+.DS_Store
+Thumbs.db
