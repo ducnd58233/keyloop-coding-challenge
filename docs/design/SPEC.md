@@ -74,7 +74,7 @@ Justifications and rejected alternatives: `SYSTEM_DESIGN.md` §7. A8 fixes the p
 | Logging | stdlib `log/slog`: tinted console + JSON file per service (`logs/<service>.log`) |
 | Metrics | `prometheus/client_golang` |
 | Tracing | OpenTelemetry Go SDK, stdout exporter |
-| Testing | stdlib `testing`, table-driven, `httptest`; `mockgen` available for larger ports |
+| Testing | stdlib `testing`, table-driven, `httptest`; `mockgen` for `app/ports.go` only |
 | Contract | OpenAPI 3.1 generated from handler annotations by `swag`, drift-checked in CI |
 | Config / request ID | `godotenv` (load `.env`), `google/uuid` (`X-Request-Id` when absent) |
 

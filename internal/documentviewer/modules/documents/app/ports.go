@@ -16,8 +16,8 @@ type DocumentSource interface {
 	Fetch(ctx context.Context, vin string) ([]domain.Document, error)
 }
 
-// CacheStore must not persist partial aggregates (NFR6).
-type CacheStore interface {
+// DocumentCache is the Postgres TTL document_cache (NFR6/NFR7). Not Redis, not in-memory.
+type DocumentCache interface {
 	Lookup(ctx context.Context, vin string) (domain.CachedResult, bool, error)
 	Store(ctx context.Context, vin string, r domain.AggregateResult, ttl time.Duration) error
 }

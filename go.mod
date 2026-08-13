@@ -12,6 +12,7 @@ require (
 	github.com/mattn/go-colorable v0.1.15
 	github.com/swaggo/swag/v2 v2.0.0-rc5
 	go.uber.org/mock v0.6.0
+	golang.org/x/sync v0.22.0
 )
 
 require (

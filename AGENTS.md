@@ -131,9 +131,15 @@ implementation.
   `context.Background()` or `context.TODO()`. Tests that need a non-cancelled ctx may use Background.
 - Declare interfaces in the consuming package (`app/ports.go`), never beside the implementation.
 - Wrap errors with `%w`. Put sentinel errors in `domain/` when callers branch on them.
-- Table-driven tests, colocated with the code they cover. Hand-written fakes are fine for ports this
-  small; `make generate` runs `mockgen` only for `app/ports.go`. Do not mockgen `Logger`. VIN and
-  log-redaction assertions use `slog.NewTextHandler` on a `bytes.Buffer`.
+- Table-driven tests, colocated with the code they cover. Ports in `app/ports.go` are mocked only
+  via `make generate` (`go.uber.org/mock`). Do not hand-write fakes for those ports. Do not mockgen
+  `Logger`; VIN and log-redaction assertions use `slog.NewTextHandler` on a `bytes.Buffer`.
+  Reusable helpers that cannot be generated live in `internal/testutil/` (or `<root>/test/` if they
+  must stay outside module packages). Do not add `<root>/tests/`. Unit tests stay colocated
+  `*_test.go` with no build tag; do not rename them to `*_unit_test.go`. Live-database tests use
+  `//go:build integration` and `*_integration_test.go` beside the adapter. Process harnesses live
+  under `<root>/test/e2e` with `//go:build e2e`. Never put live-database or live-process I/O in an
+  untagged `*_test.go` file.
 - Name things after the domain, not the pattern: `documents.Aggregate`, not `DocumentServiceImpl`.
 - Comments explain *why* (constraint, trap, requirement id). Do not restate the next line. Exported
   godoc that revive requires starts with the identifier and states a constraint, not a paraphrase.
