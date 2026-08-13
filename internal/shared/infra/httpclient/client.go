@@ -16,7 +16,11 @@ import (
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/randutil"
 )
 
-const maxBody = 1 << 20
+const (
+	maxBody    = 1 << 20
+	jitterLow  = 10 * time.Millisecond
+	jitterHigh = 50 * time.Millisecond
+)
 
 // Client issues JSON GETs with at most one retry on transport errors and 5xx.
 // Timeouts never retry (NFR2 budget is already spent).
@@ -121,16 +125,16 @@ func retryable(err error) bool {
 	}
 	var st statusError
 	if errors.As(err, &st) {
-		return st.code >= 500
+		return st.code >= http.StatusInternalServerError
 	}
 	// Transport errors only. Decode failures must not retry into a dirty dest.
 	return err.Error() == "upstream fetch failed"
 }
 
 func jitter() time.Duration {
-	d, err := randutil.DurationBetween(10*time.Millisecond, 50*time.Millisecond)
+	d, err := randutil.DurationBetween(jitterLow, jitterHigh)
 	if err != nil {
-		return 10 * time.Millisecond
+		return jitterLow
 	}
 	return d
 }

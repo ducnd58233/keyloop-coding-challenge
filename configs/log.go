@@ -8,9 +8,9 @@ type Log struct {
 	VINHashSalt string
 }
 
-func loadLog() (Log, error) {
+func loadLog() Log {
 	return Log{
 		Level:       env("LOG_LEVEL", "info"),
 		VINHashSalt: env("VIN_HASH_SALT", "dev-only-not-a-secret"),
-	}, nil
+	}
 }

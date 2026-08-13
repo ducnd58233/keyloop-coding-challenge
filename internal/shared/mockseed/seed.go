@@ -2,6 +2,8 @@
 // Payloads stay in each mock package so the §5.3 shapes cannot accidentally converge.
 package mockseed
 
+import "github.com/ducnd58233/unified-document-viewer/internal/shared/common"
+
 // Kind is which upstreams hold documents for a seeded VIN.
 type Kind string
 
@@ -65,8 +67,8 @@ func HasService(k Kind) bool {
 
 // Suffix is the last 4 characters. Never log the full VIN (SPEC §8).
 func Suffix(vin string) string {
-	if len(vin) <= 4 {
+	if len(vin) <= common.VinSuffixLen {
 		return vin
 	}
-	return vin[len(vin)-4:]
+	return vin[len(vin)-common.VinSuffixLen:]
 }

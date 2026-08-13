@@ -1,5 +1,7 @@
 package configs
 
+const defaultMaxConns = 10
+
 // Database points at the PostgreSQL instance provisioned by
 // deployments/docker/docker-compose.yaml (A8).
 type Database struct {
@@ -8,7 +10,7 @@ type Database struct {
 }
 
 func loadDatabase() (Database, error) {
-	maxConns, err := integer("DB_MAX_CONNS", 10)
+	maxConns, err := integer("DB_MAX_CONNS", defaultMaxConns)
 	if err != nil {
 		return Database{}, err
 	}

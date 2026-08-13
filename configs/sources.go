@@ -2,6 +2,8 @@ package configs
 
 import "time"
 
+const defaultAggregateTimeout = 2500 * time.Millisecond
+
 // Sources configures the two upstream document systems (A5). Mock fault
 // injection is process flags on cmd/sales and cmd/service, not environment variables.
 type Sources struct {
@@ -16,7 +18,7 @@ func loadSources() (Sources, error) {
 	if err != nil {
 		return Sources{}, err
 	}
-	aggregate, err := duration("AGGREGATE_TIMEOUT", 2500*time.Millisecond)
+	aggregate, err := duration("AGGREGATE_TIMEOUT", defaultAggregateTimeout)
 	if err != nil {
 		return Sources{}, err
 	}

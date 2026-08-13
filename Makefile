@@ -209,7 +209,7 @@ migrate-down: $(MIGRATE) ## Roll back one migration
 # Docker - infra only vs full stack
 # ---------------------------------------------------------------------------
 
-infra-up: ## Start infrastructure only (PostgreSQL)
+infra-up: ## Start PostgreSQL 18 (after a major bump: make db-reset)
 	docker compose -p $(COMPOSE_PROJECT) -f $(COMPOSE_INFRA) up -d --wait
 
 infra-down: ## Stop infrastructure
@@ -225,7 +225,7 @@ db-up: infra-up ## Alias: start PostgreSQL (same as infra-up)
 
 db-down: infra-down ## Alias: stop PostgreSQL (same as infra-down)
 
-# Drops the volume too - use when a migration needs a clean slate.
+# Drops the volume too - use after a Postgres major bump or a bad migration.
 db-reset: ## Stop PostgreSQL, drop the volume, start clean
 	docker compose -p $(COMPOSE_PROJECT) -f $(COMPOSE_INFRA) down -v
 	docker compose -p $(COMPOSE_PROJECT) -f $(COMPOSE_INFRA) up -d --wait

@@ -36,7 +36,7 @@ const (
 var (
 	startOnce sync.Once
 	shared    *postgres.Pool
-	startErr  error
+	errStart  error
 )
 
 // OpenPool returns a pool against an isolated Testcontainers Postgres 18
@@ -45,10 +45,10 @@ var (
 func OpenPool(t *testing.T) *postgres.Pool {
 	t.Helper()
 	startOnce.Do(func() {
-		startErr = startIsolated(context.Background())
+		errStart = startIsolated(context.Background())
 	})
-	if startErr != nil {
-		t.Fatalf("isolated postgres: %v", startErr)
+	if errStart != nil {
+		t.Fatalf("isolated postgres: %v", errStart)
 	}
 	return shared
 }

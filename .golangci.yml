@@ -10,15 +10,59 @@ linters:
   default: standard
   enable:
     - bodyclose       # every HTTP response body is closed - two upstream clients per request
+    - canonicalheader # X-Request-Id and friends use canonical names
     - contextcheck    # a dropped context breaks the per-source timeout budget (NFR2)
+    - copyloopvar
+    - durationcheck
+    - errchkjson
+    - errname
     - errorlint       # errors compared with == instead of errors.Is
+    - exhaustive      # SourceStatus / Outcome switches stay complete
+    - fatcontext
+    - forcetypeassert
+    - goconst         # R7: repeated strings become named consts
     - gosec
+    - iotamixing      # R7: do not mix iota with unrelated string consts
     - misspell
+    - mnd             # magic numbers in production code
     - noctx           # an HTTP call without a context cannot honour a deadline
+    - nolintlint      # AGENTS: do not silence gosec / mnd with //nolint
     - revive
+    - rowserrcheck
+    - sloglint
     - sqlclosecheck   # rows left open exhaust the pool
     - unconvert
+    - unparam
+    - usestdlibvars   # http.StatusOK, not 200
     - wastedassign
+  settings:
+    mnd:
+      # Skip assign/operation so 2*time.Second and bit shifts stay readable.
+      # 0 and 1 are always ignored by mnd; 2 and 3 cover small multipliers.
+      checks:
+        - argument
+        - case
+        - condition
+        - return
+      ignored-numbers:
+        - "0"
+        - "1"
+        - "2"
+        - "3"
+      ignored-functions:
+        - '^math\.'
+        - '^http\.StatusText$'
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+      match-constant: true
+      ignore-tests: true
+    nolintlint:
+      allow-unused: false
+      require-explanation: true
+      require-specific: true
+    exhaustive:
+      default-signifies-exhaustive: true
   exclusions:
     generated: lax
     rules:
@@ -27,6 +71,9 @@ linters:
         linters:
           - gosec
           - noctx
+          - mnd
+          - errchkjson
+          - unparam
       # Isolated Testcontainers helper: fake local creds, not production secrets.
       - path: internal/testutil/
         linters:

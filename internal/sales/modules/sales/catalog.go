@@ -84,7 +84,7 @@ func buildCatalog() map[string][]record {
 func seedRecords(vin string, idx int) []record {
 	n := 1 + idx%3
 	suffix := mockseed.Suffix(vin)
-	base := int64(1_700_000_000)
+	base := seedEpoch
 	out := make([]record, n)
 	for j := 0; j < n; j++ {
 		cat := salesCategories[(idx+j)%len(salesCategories)]
@@ -93,7 +93,7 @@ func seedRecords(vin string, idx int) []record {
 			DocID:        id,
 			Category:     cat,
 			Name:         fmt.Sprintf("%s document %d", cat, j+1),
-			CreatedEpoch: base + int64((idx*1000+j)*86400),
+			CreatedEpoch: base + int64((idx*1000+j)*secondsPerDay),
 			DownloadPath: "/sales/v1/documents/" + id + "/raw",
 		}
 	}

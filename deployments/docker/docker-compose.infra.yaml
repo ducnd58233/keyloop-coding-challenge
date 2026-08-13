@@ -14,8 +14,9 @@ services:
       timeout: 3s
       retries: 10
       start_period: 10s
-    volumes: ["postgres-data:/var/lib/postgresql"]
+    # Named per major so `make db-up` does not reuse a PG17 postgres-data volume.
+    volumes: ["postgres18-data:/var/lib/postgresql"]
     restart: unless-stopped
 
 volumes:
-  postgres-data:
+  postgres18-data:
