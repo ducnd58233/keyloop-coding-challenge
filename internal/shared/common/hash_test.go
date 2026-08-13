@@ -3,11 +3,13 @@ package common
 import (
 	"strings"
 	"testing"
+
+	"github.com/ducnd58233/unified-document-viewer/internal/testutil"
 )
 
 func TestHashVINIsDeterministicAndRedacts(t *testing.T) {
 	t.Parallel()
-	const vin = "1HGCM82633"
+	const vin = testutil.TestVIN
 	const salt = "unit-test-salt"
 
 	h1, s1 := HashVIN(salt, vin)
@@ -28,7 +30,7 @@ func TestHashVINIsDeterministicAndRedacts(t *testing.T) {
 
 func TestHashVINSaltChangesDigest(t *testing.T) {
 	t.Parallel()
-	const vin = "1HGCM82633"
+	const vin = testutil.TestVIN
 	a, _ := HashVIN("salt-a", vin)
 	b, _ := HashVIN("salt-b", vin)
 	if a == b {

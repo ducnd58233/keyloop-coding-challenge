@@ -40,10 +40,7 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	logCfg, err := loadLog()
-	if err != nil {
-		return Config{}, err
-	}
+	logCfg := loadLog()
 
 	cfg := Config{
 		HTTP:     httpCfg,

@@ -86,9 +86,20 @@ and installs signal handlers. It does not call `NewLogger`, open a database, or 
 `Run` already closed. One directory per running system to read, one directory to change to swap an
 implementation.
 
+**R7 - Named values, not magic literals.** A number, duration, header, path template, status
+label, or error code that appears three or more times, or that is a closed set (source name,
+outcome, error code we own), must be a named `const` next to the type that owns it. Do not dump a
+`constants.go` kitchen sink. Closed wire vocabularies are typed string constants (`SourceName`,
+`SourceStatus`, `CodeInvalidVIN`), not iota ints, because they serialize as labels. Integer
+machine states with no wire label use `iota` on a named type; start at `iota + 1` unless zero is
+the intended default (breaker `closed`). Reuse stdlib names (`http.StatusOK`, `time.Second`)
+instead of wrapping them. One-off literals at a single call site, struct tags, SQL `$n`
+placeholders, and intentionally unique test fixtures stay inline. The third copy extracts; the
+first does not.
+
 ## Always
 
-- Obey R1-R6; they are review gates, not preferences.
+- Obey R1-R7; they are review gates, not preferences.
 - Read every environment variable in `configs/` and nowhere else. Mock outage and live chaos are
   process flags on the mock binaries, not `.env` keys.
 - Regenerate and commit the contract when a handler or DTO changes (`make openapi`).
@@ -125,6 +136,10 @@ implementation.
   while on `main`, `--all`, `--mirror`).
 - Force-push `main`/`master` (`--force`, `--force-with-lease`, `-f`, `+main`), including to invent
   a PR after a direct push, unless the user explicitly requests a rewind.
+- Leave a magic number or string that appears three or more times, or a closed vocabulary, as a
+  bare literal. Name it (`const`, typed string enum, or `iota`) in the owning package (R7).
+- Point integration tests at compose `DATABASE_URL` or the infra volume. Use Testcontainers plus
+  `migrations/` so adapter tests never share the K5 demo database.
 
 </required>
 
@@ -144,14 +159,17 @@ implementation.
   Reusable helpers that cannot be generated live in `internal/testutil/` (or `<root>/test/` if they
   must stay outside module packages). Do not add `<root>/tests/`. Unit tests stay colocated
   `*_test.go` with no build tag; do not rename them to `*_unit_test.go`. Live-database tests use
-  `//go:build integration` and `*_integration_test.go` beside the adapter. Process harnesses live
-  under `<root>/test/e2e` with `//go:build e2e`. Never put live-database or live-process I/O in an
-  untagged `*_test.go` file.
+  `//go:build integration` and `*_integration_test.go` beside the adapter. They start Postgres via
+  Testcontainers, apply `migrations/`, and never read `configs.DATABASE_URL` or the compose volume.
+  Process harnesses live under `<root>/test/e2e` with `//go:build e2e`. Never put live-database or
+  live-process I/O in an untagged `*_test.go` file.
 - Name things after the domain, not the pattern: `documents.Aggregate`, not `DocumentServiceImpl`.
 - Comments explain *why* (constraint, trap, requirement id). Do not restate the next line. Exported
   godoc that revive requires starts with the identifier and states a constraint, not a paraphrase.
 - No commented-out code, no banner art, no emoji, no em-dash in comments or commit messages.
 - Mock randomness goes through `internal/shared/randutil` (`crypto/rand`). Do not import `math/rand`.
+- Magic literals follow R7. Group related `const`/`type` blocks; do not mix a string env key into
+  an iota enum group. Unexported names are `maxHeaderLen`, not `MAX_HEADER_LEN`.
 
 </rules>
 
@@ -161,7 +179,7 @@ implementation.
 
 - Any `git commit`, feature-branch push, or branch deletion, unless the user already authorized
   that ship in this conversation.
-- Adding a dependency, or any exception to R1-R6.
+- Adding a dependency, or any exception to R1-R7.
 - Editing `docs/design/DRAFT.md` - it is the source of truth, not a working file.
 - Changing the public API contract once `api/<service>/http/docs/` exists.
 

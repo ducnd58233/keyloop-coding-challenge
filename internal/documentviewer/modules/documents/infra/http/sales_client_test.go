@@ -13,9 +13,10 @@ import (
 
 	"github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/domain"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/httpserver"
+	"github.com/ducnd58233/unified-document-viewer/internal/testutil"
 )
 
-const testVIN = "1HGCM82633"
+const testVIN = testutil.TestVIN
 
 func TestSalesClientNormalisesEpochAndRelativeURL(t *testing.T) {
 	t.Parallel()
@@ -69,7 +70,7 @@ func TestSalesClientUnknownTypeIsOTHER(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, _ *nethttp.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"vin":"1HGCM82633","records":[{"doc_id":"X-1","category":"mystery","name":"X","created_epoch":1,"download_path":"/x"}]}`)
+		_, _ = io.WriteString(w, `{"vin":"`+testVIN+`","records":[{"doc_id":"X-1","category":"mystery","name":"X","created_epoch":1,"download_path":"/x"}]}`)
 	}))
 	t.Cleanup(srv.Close)
 	docs, err := NewSalesClient(srv.URL).Fetch(context.Background(), testVIN)

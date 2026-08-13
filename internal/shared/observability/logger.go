@@ -15,7 +15,11 @@ import (
 	"github.com/mattn/go-colorable"
 )
 
-const defaultDir = "logs"
+const (
+	defaultDir = "logs"
+	dirPerm    = 0o750
+	filePerm   = 0o600
+)
 
 // Logger is the logging port. *slog.Logger satisfies it so call sites do not
 // depend on a concrete handler.
@@ -64,7 +68,7 @@ func NewLogger(opt Options) (*slog.Logger, io.Closer, error) {
 		dir = defaultDir
 	}
 
-	if err := os.MkdirAll(dir, 0o750); err != nil {
+	if err := os.MkdirAll(dir, dirPerm); err != nil {
 		return nil, nil, fmt.Errorf("observability: mkdir %s: %w", dir, err)
 	}
 	root, err := os.OpenRoot(dir)
@@ -72,7 +76,7 @@ func NewLogger(opt Options) (*slog.Logger, io.Closer, error) {
 		return nil, nil, fmt.Errorf("observability: open log dir %s: %w", dir, err)
 	}
 	defer func() { _ = root.Close() }()
-	f, err := root.OpenFile(service+".log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	f, err := root.OpenFile(service+".log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, filePerm)
 	if err != nil {
 		return nil, nil, fmt.Errorf("observability: open %s.log: %w", service, err)
 	}

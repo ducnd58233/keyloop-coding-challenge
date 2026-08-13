@@ -59,7 +59,7 @@ func TestServiceClientInvalidDateStillReturnsDoc(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, _ *nethttp.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"vehicleVin":"1HGCM82633","attachments":[{"attachmentId":"WO-1","documentType":"WORK_ORDER","displayName":"x","issuedDate":"not-a-date","file":{"uri":"http://example/a"}}]}`)
+		_, _ = io.WriteString(w, `{"vehicleVin":"`+testVIN+`","attachments":[{"attachmentId":"WO-1","documentType":"WORK_ORDER","displayName":"x","issuedDate":"not-a-date","file":{"uri":"http://example/a"}}]}`)
 	}))
 	t.Cleanup(srv.Close)
 	docs, err := NewServiceClient(srv.URL).Fetch(context.Background(), testVIN)

@@ -15,8 +15,13 @@ func pickN(intN func(int) int, n int) (int, error) {
 	return randutil.IntN(n)
 }
 
+const (
+	maxExtraAttachments = 4
+	issuedWindowHours   = 400 * 24
+)
+
 func generateAttachments(vin, baseURL string, intN func(int) int) ([]attachment, error) {
-	count, err := pickN(intN, 4)
+	count, err := pickN(intN, maxExtraAttachments)
 	if err != nil {
 		return nil, err
 	}
@@ -29,7 +34,7 @@ func generateAttachments(vin, baseURL string, intN func(int) int) ([]attachment,
 		if err != nil {
 			return nil, err
 		}
-		hours, err := pickN(intN, 400*24)
+		hours, err := pickN(intN, issuedWindowHours)
 		if err != nil {
 			return nil, err
 		}

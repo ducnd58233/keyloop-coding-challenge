@@ -31,8 +31,12 @@ func mountHTTP(d httpDeps) http.Handler {
 	)
 }
 
+type healthResponse struct {
+	Status string `json:"status"`
+}
+
 func registerHealth(mux *http.ServeMux) {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		httpserver.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		httpserver.JSON(w, http.StatusOK, healthResponse{Status: "ok"})
 	})
 }

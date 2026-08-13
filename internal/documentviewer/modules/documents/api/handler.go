@@ -11,6 +11,7 @@ import (
 
 	"github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/domain"
 	"github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/dto"
+	"github.com/ducnd58233/unified-document-viewer/internal/shared/common"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/httpserver"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
@@ -65,21 +66,23 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	actor := clipHeader(r.Header.Get("X-Actor-Id"))
 
 	status := http.StatusOK
-	var payload any
 	switch {
 	case errors.Is(err, domain.ErrInvalidVIN):
 		status = http.StatusBadRequest
-		payload = dto.ErrorResponse{Error: dto.ErrorBody{Code: domain.CodeInvalidVIN}}
 	case err != nil:
-		// Unexpected errors stay inside SPEC §2: 503 ALL_SOURCES_UNAVAILABLE, not INTERNAL_ERROR.
 		status = http.StatusServiceUnavailable
-		payload = dto.ErrorResponse{Error: dto.ErrorBody{Code: domain.CodeAllSourcesUnavailable}}
-	default:
-		payload = dto.FromAggregate(vin, reqID, result)
 	}
 
 	h.trace(r.Context(), vin, status)
-	httpserver.JSON(w, status, payload)
+	switch {
+	case errors.Is(err, domain.ErrInvalidVIN):
+		httpserver.JSON(w, status, dto.ErrorResponse{Error: dto.ErrorBody{Code: domain.CodeInvalidVIN}})
+	case err != nil:
+		// Unexpected errors stay inside SPEC §2: 503 ALL_SOURCES_UNAVAILABLE, not INTERNAL_ERROR.
+		httpserver.JSON(w, status, dto.ErrorResponse{Error: dto.ErrorBody{Code: domain.CodeAllSourcesUnavailable}})
+	default:
+		httpserver.JSON(w, status, dto.FromAggregate(vin, reqID, result))
+	}
 	// Write first so a slow FR8 insert cannot blow the NFR4 budget.
 	if h.audit != nil {
 		h.audit.Record(r.Context(), vin, actor, reqID, result, err, latency)
@@ -92,7 +95,7 @@ func (h *Handler) trace(ctx context.Context, vin string, status int) {
 	}
 	h.log.InfoContext(ctx, "documents lookup",
 		"route", routeTemplate,
-		"vin_suffix", vinSuffix(vin),
+		"vin_suffix", common.VINSuffix(vin),
 		"status", status,
 	)
 }
@@ -104,12 +107,4 @@ func clipHeader(v string) string {
 	}
 	runes := []rune(v)
 	return string(runes[:maxHeaderLen])
-}
-
-func vinSuffix(vin string) string {
-	runes := []rune(vin)
-	if len(runes) <= 4 {
-		return ""
-	}
-	return string(runes[len(runes)-4:])
 }

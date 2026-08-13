@@ -10,6 +10,16 @@ import (
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
 
+const codeInternalError = "INTERNAL_ERROR"
+
+type panicError struct {
+	Code string `json:"code"`
+}
+
+type panicResponse struct {
+	Error panicError `json:"error"`
+}
+
 // Recover turns a panic into a logged 500 instead of a crashed process.
 // INTERNAL_ERROR is the process safety net; it is not part of the FR7 per-source list.
 func Recover(l observability.Logger) Middleware {
@@ -22,8 +32,8 @@ func Recover(l observability.Logger) Middleware {
 						"panic_type", fmt.Sprintf("%T", x),
 						"stack", string(debug.Stack()),
 					)
-					httpserver.JSON(w, http.StatusInternalServerError, map[string]any{
-						"error": map[string]string{"code": "INTERNAL_ERROR"},
+					httpserver.JSON(w, http.StatusInternalServerError, panicResponse{
+						Error: panicError{Code: codeInternalError},
 					})
 				}
 			}(r.Context())

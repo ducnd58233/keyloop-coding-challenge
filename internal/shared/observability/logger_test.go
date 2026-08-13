@@ -57,6 +57,25 @@ func TestNewLoggerWritesTintedConsoleAndJSONFile(t *testing.T) {
 	}
 }
 
+func TestNewLoggerFailsWhenDirCannotBeCreated(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "notadir")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := NewLogger(Options{
+		Service: "sales",
+		Level:   "info",
+		Stdout:  &bytes.Buffer{},
+		Dir:     filepath.Join(blocker, "logs"),
+	})
+	if err == nil {
+		t.Fatal("expected mkdir error")
+	}
+	if !strings.Contains(err.Error(), "mkdir") {
+		t.Fatalf("err = %v, want mkdir", err)
+	}
+}
+
 func TestNewLoggerRequiresService(t *testing.T) {
 	_, _, err := NewLogger(Options{Level: "info", Dir: t.TempDir(), Stdout: &bytes.Buffer{}})
 	if err == nil {

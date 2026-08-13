@@ -15,7 +15,7 @@ func loadHTTP() (HTTP, error) {
 		return HTTP{}, err
 	}
 	return HTTP{
-		Address:        env("HTTP_ADDR", ":8080"),
+		Address:        env("HTTP_ADDR", ":8000"),
 		RequestTimeout: requestTimeout,
 	}, nil
 }

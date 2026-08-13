@@ -79,7 +79,7 @@ func TestAuditRecordIsAppendOnly(t *testing.T) {
 func TestRecordAccessExecuteDoesNotPersistFullVIN(t *testing.T) {
 	pool := testutil.OpenPool(t)
 	repo := NewAuditRepository(pool)
-	const vin = "1HGCM82633"
+	const vin = testutil.TestVIN
 	const salt = "unit-test-salt"
 	wantHash, wantSuffix := common.HashVIN(salt, vin)
 	ctx := context.Background()

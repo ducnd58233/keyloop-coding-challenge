@@ -15,22 +15,29 @@ func pickN(intN func(int) int, n int) (int, error) {
 	return randutil.IntN(n)
 }
 
+const (
+	maxExtraRecords = 4
+	seedEpoch       = int64(1_700_000_000)
+	epochJitterMax  = 20_000_000
+	secondsPerDay   = 86400
+)
+
 func generateRecords(vin string, intN func(int) int) ([]record, error) {
-	count, err := pickN(intN, 4)
+	count, err := pickN(intN, maxExtraRecords)
 	if err != nil {
 		return nil, err
 	}
 	n := 1 + count
 	out := make([]record, n)
 	suffix := mockseed.Suffix(vin)
-	baseEpoch := int64(1_700_000_000)
+	baseEpoch := seedEpoch
 	for i := 0; i < n; i++ {
 		catIdx, err := pickN(intN, len(salesCategories))
 		if err != nil {
 			return nil, err
 		}
 		cat := salesCategories[catIdx]
-		offset, err := pickN(intN, 20_000_000)
+		offset, err := pickN(intN, epochJitterMax)
 		if err != nil {
 			return nil, err
 		}

@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const connectTimeout = 8 * time.Second
+
 // ErrNoRows lets adapters treat a miss without importing pgx.
 var ErrNoRows = pgx.ErrNoRows
 
@@ -34,7 +36,7 @@ type txKey struct{}
 func Open(ctx context.Context, url string, maxConns int) (*Pool, error) {
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, 8*time.Second)
+		ctx, cancel = context.WithTimeout(ctx, connectTimeout)
 		defer cancel()
 	}
 	cfg, err := pgxpool.ParseConfig(url)

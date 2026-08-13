@@ -15,9 +15,10 @@ import (
 	"github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/domain"
 	"github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/dto"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/httpserver/middleware"
+	"github.com/ducnd58233/unified-document-viewer/internal/testutil"
 )
 
-const testVIN = "1HGCM82633"
+const testVIN = testutil.TestVIN
 
 type stubQuery struct {
 	result domain.AggregateResult

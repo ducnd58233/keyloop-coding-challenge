@@ -10,9 +10,10 @@ import (
 	audituc "github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/audit/app/usecases"
 	auditdomain "github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/audit/domain"
 	docsdomain "github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/domain"
+	"github.com/ducnd58233/unified-document-viewer/internal/testutil"
 )
 
-const testVIN = "1HGCM82633"
+const testVIN = testutil.TestVIN
 
 type captureRecorder struct {
 	n       int

@@ -113,6 +113,8 @@ func (s server) traceFault(r *http.Request, vin string, fault mockfault.Result) 
 		status = http.StatusServiceUnavailable
 	case mockfault.KindError:
 		status = http.StatusInternalServerError
+	case mockfault.KindOK, mockfault.KindTimeout, mockfault.KindLatency:
+		status = 0
 	}
 	s.log.Warn("sales fault", append(s.baseAttrs(r, vin, fault), slog.Int("status", status))...)
 }

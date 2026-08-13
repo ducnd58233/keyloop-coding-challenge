@@ -14,9 +14,10 @@ import (
 	"github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/domain"
 	dochttp "github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/infra/http"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/circuitbreaker"
+	"github.com/ducnd58233/unified-document-viewer/internal/testutil"
 )
 
-const testVIN = "1HGCM82633"
+const testVIN = testutil.TestVIN
 
 func salesDoc(id string) domain.Document {
 	return domain.Document{

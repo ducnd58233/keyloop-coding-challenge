@@ -1,6 +1,10 @@
 package domain
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/ducnd58233/unified-document-viewer/internal/testutil"
+)
 
 func TestDefaultFormatA1(t *testing.T) {
 	t.Parallel()
@@ -9,7 +13,7 @@ func TestDefaultFormatA1(t *testing.T) {
 		vin  string
 		ok   bool
 	}{
-		{name: "ten uppercase alphanumeric", vin: "1HGCM82633", ok: true},
+		{name: "ten uppercase alphanumeric", vin: testutil.TestVIN, ok: true},
 		{name: "nine rejected", vin: "1HGCM8263", ok: false},
 		{name: "eleven rejected", vin: "1HGCM826331", ok: false},
 		{name: "lowercase rejected", vin: "1hgcm82633", ok: false},
@@ -31,7 +35,7 @@ func TestDefaultFormatA1(t *testing.T) {
 func TestFormatISO3779IsConstantChange(t *testing.T) {
 	t.Parallel()
 	iso := Format{Length: 17, Alphabet: "ABCDEFGHJKLMNPRSTUVWXYZ0123456789"}
-	if iso.Valid("1HGCM82633") {
+	if iso.Valid(testutil.TestVIN) {
 		t.Fatal("10-char A1 VIN must fail the 17-char ISO rule")
 	}
 	if !iso.Valid("1HGCM82633A000001") {
