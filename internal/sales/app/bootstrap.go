@@ -9,6 +9,7 @@ import (
 	"github.com/ducnd58233/unified-document-viewer/internal/sales/modules/sales"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/httpserver"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/httpserver/middleware"
+	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/lifecycle"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/mockfault"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
@@ -29,7 +30,16 @@ func Run(ctx context.Context, opt RunOptions) error {
 	if err != nil {
 		return fmt.Errorf("logger: %w", err)
 	}
-	defer func() { _ = logClose.Close() }()
+
+	lc := lifecycle.New(logger)
+	if err := lc.Start(ctx); err != nil {
+		_ = logClose.Close()
+		return err
+	}
+	defer func() {
+		lc.Stop(context.WithoutCancel(ctx))
+		_ = logClose.Close()
+	}()
 
 	addr := opt.Addr
 	if addr == "" {
@@ -43,7 +53,7 @@ func Run(ctx context.Context, opt RunOptions) error {
 		generate = true
 	}
 
-	logger.Info("sales mock listening",
+	logger.Info("sales mock config",
 		slog.String("addr", addr),
 		slog.Bool("down", opt.Down),
 		slog.Bool("deterministic", opt.Deterministic),

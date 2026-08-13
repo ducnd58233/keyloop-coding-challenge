@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"runtime/debug"
 
@@ -14,14 +15,14 @@ import (
 func Recover(l observability.Logger) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			defer func() {
+			defer func(ctx context.Context) {
 				if x := recover(); x != nil {
-					l.ErrorContext(r.Context(), "panic recovered", "panic", x, "stack", string(debug.Stack()))
+					l.ErrorContext(ctx, "panic recovered", "panic", x, "stack", string(debug.Stack()))
 					httpserver.JSON(w, http.StatusInternalServerError, map[string]any{
 						"error": map[string]string{"code": "INTERNAL_ERROR"},
 					})
 				}
-			}()
+			}(r.Context())
 			next.ServeHTTP(w, r)
 		})
 	}

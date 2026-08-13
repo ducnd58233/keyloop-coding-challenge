@@ -49,9 +49,10 @@ func New(opt Options) *Aggregate {
 }
 
 type fetchOutcome struct {
-	name domain.SourceName
-	docs []domain.Document
-	err  error
+	name    domain.SourceName
+	docs    []domain.Document
+	err     error
+	latency time.Duration
 }
 
 // Documents fans out to every source. A source failure is recorded as data so
@@ -147,8 +148,9 @@ func (a *Aggregate) fanOut(ctx context.Context, vin string) []fetchOutcome {
 				srcCtx, cancel = context.WithTimeout(gctx, a.perSourceTimeout)
 			}
 			defer cancel()
+			start := time.Now()
 			docs, err := src.Fetch(srcCtx, vin)
-			out[i] = fetchOutcome{name: src.Name(), docs: docs, err: err}
+			out[i] = fetchOutcome{name: src.Name(), docs: docs, err: err, latency: time.Since(start)}
 			return nil
 		})
 	}
@@ -159,7 +161,11 @@ func (a *Aggregate) fanOut(ctx context.Context, vin string) []fetchOutcome {
 func classify(outcomes []fetchOutcome) (reports []domain.SourceReport, docs []domain.Document, okCount int) {
 	reports = make([]domain.SourceReport, 0, len(outcomes))
 	for _, o := range outcomes {
-		rep := domain.SourceReport{Name: o.name, Status: domain.SourceStatusOK}
+		rep := domain.SourceReport{
+			Name:      o.name,
+			Status:    domain.SourceStatusOK,
+			LatencyMs: int(o.latency / time.Millisecond),
+		}
 		if o.err != nil {
 			rep.Status = domain.SourceStatusError
 			rep.ErrorCode = domain.CodeUpstreamError
@@ -171,6 +177,7 @@ func classify(outcomes []fetchOutcome) (reports []domain.SourceReport, docs []do
 			continue
 		}
 		okCount++
+		rep.DocumentCount = len(o.docs)
 		docs = append(docs, o.docs...)
 		reports = append(reports, rep)
 	}
