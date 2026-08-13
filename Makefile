@@ -135,9 +135,10 @@ test: ## Unit tests
 test-race: ## Unit tests under -race. Gate for anything concurrent
 	$(GO) test -race ./...
 
-# Needs a running database: make infra-up migrate-up first.
-test-integration: ## Integration tests (build tag), needs a live database
-	$(GO) test -tags=integration ./internal/...
+# Isolated Testcontainers Postgres 18 + migrations/. Does not use compose DATABASE_URL.
+# -p 1: Windows Docker Desktop rejects concurrent Testcontainers providers (rootless error).
+test-integration: ## Integration tests (build tag); starts its own Postgres, no infra-up
+	$(GO) test -p 1 -tags=integration ./internal/...
 
 cover: ## Coverage profile and per-function summary
 	$(GO) test -coverprofile=coverage.out ./...

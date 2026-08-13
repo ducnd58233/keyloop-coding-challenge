@@ -359,7 +359,7 @@ flowchart TB
         SERVICE["cmd/service<br/>port 9101<br/>camelCase, RFC3339, nested"]
     end
 
-    DB[("PostgreSQL 17<br/>document_cache<br/>search_audit")]
+    DB[("PostgreSQL 18<br/>document_cache<br/>search_audit")]
     OBS["Observability sinks<br/>tinted console + JSON file, /metrics, OTel exporter"]
 
     clients --> MW
@@ -511,7 +511,7 @@ Target layout after T8. T2 holds the directories with `doc.go` stubs until each 
 ├── deployments/
 │   └── docker/
 │       ├── Dockerfile                multi-stage, non-root, SERVICE build-arg
-│       ├── docker-compose.infra.yaml PostgreSQL 17 (`make infra-up`)
+│       ├── docker-compose.infra.yaml PostgreSQL 18 (`make infra-up`)
 │       ├── docker-compose.services.yaml  documentviewer + sales + service
 │       └── docker-compose.yaml       include both (`make stack-up`)
 ├── migrations/                       golang-migrate pairs, applied by `make migrate-up`
@@ -843,6 +843,8 @@ Listed separately so additions beyond the source document are visible.
 | `github.com/swaggo/swag/v2` | Import of generated `api/<service>/http/docs/docs.go`. Tool stays in `./bin`; this module is only so `go test ./...` can compile the contract package |
 | Schema applied by `make migrate-up`, not `embed` on boot | A8 plus K5: the reviewer path is `make dev` (compose + migrate + mocks + API). Compiling SQL into the binary would hide the migration step from `make help` and split schema ownership away from `migrations/` |
 | `godotenv` + `google/uuid` | `Load()` reads `.env` when present; `X-Request-Id` is generated when the caller omits it. Both are small, single-purpose modules beside the four groups in §7 |
+| PostgreSQL 18 (`postgres:18-alpine`) | A8 requires PostgreSQL, not a major version. 18 is current stable. Compose mounts `/var/lib/postgresql` to match the image 18+ PGDATA layout |
+| Integration tests: Testcontainers + `migrations/`, not compose `DATABASE_URL` | K5 compose DB is the reviewer demo. Adapter tests must not share that volume or DSN. `testcontainers-go` and `golang-migrate` are test-only |
 
 ---
 
@@ -855,12 +857,12 @@ A8 fixes the persistence choice. The rest is derived.
 | Language | **Go 1.26** (verified `go1.26.5`) | FR3, NFR1, NFR2 and NFR3 are all about bounded parallel fan-out with per-source deadlines and failure isolation. Goroutines, `context` and `errgroup` make that a first-class concern rather than plumbing. Single static binary | Node or Python: achievable, but the concurrency and cancellation semantics the scenario is *about* would be less direct to express |
 | HTTP routing | **stdlib `net/http.ServeMux`** | Since Go 1.22 the stdlib mux supports method and wildcard patterns, which is the entire routing need. Zero dependencies; handlers are plain `http.Handler`, trivially testable with `httptest` | `chi`: good, but with one route the middleware helper is ~20 lines to hand-roll. `gin`/`echo`: heavier, bespoke context type complicates handler tests |
 | Concurrency | **`golang.org/x/sync/errgroup`** | Reviewed implementation of bounded fan-out with cancellation. Used carefully per DD-2 | Hand-rolled `WaitGroup` + channels: more code, more ways to leak a goroutine |
-| Persistence | **PostgreSQL 17 via `pgx/v5`** | **A8 specifies this.** Real transactions, so the transaction rule R4 is demonstrable rather than theoretical; a real connection pool to reason about under load; `jsonb` for the cached payload. Shipped in `deployments/docker/docker-compose.yaml` so `make dev` is one command, not a provisioning exercise (K5) | **SQLite**: zero setup, but no pooling, and an embedded database sidesteps the operational questions the brief's "scalability, reliability" line is asking about. **MongoDB**: a natural fit for the cached document payload and TTL indexes, but multi-document transactions need a replica set, which complicates compose for the one capability R4 depends on |
+| Persistence | **PostgreSQL 18 via `pgx/v5`** | **A8 specifies PostgreSQL.** Real transactions, so the transaction rule R4 is demonstrable rather than theoretical; a real connection pool to reason about under load; `jsonb` for the cached payload. Shipped in `deployments/docker/docker-compose.yaml` so `make dev` is one command, not a provisioning exercise (K5) | **SQLite**: zero setup, but no pooling, and an embedded database sidesteps the operational questions the brief's "scalability, reliability" line is asking about. **MongoDB**: a natural fit for the cached document payload and TTL indexes, but multi-document transactions need a replica set, which complicates compose for the one capability R4 depends on |
 | Data access | **`pgx/v5` + golang-migrate via `make migrate-up`** | Two tables. Explicit SQL is shorter and more reviewable than any abstraction over it, and `pgx` exposes the pool statistics the scalability section relies on. Schema lives in `migrations/` and is applied by the Makefile, not on process boot, so `make help` is the single place a reviewer looks | GORM: obscures emitted queries, large dependency, solves a problem this schema does not have. `database/sql`: portable, but gives up pgx's pool introspection and native `jsonb` handling. `embed` on boot: hides the migration step from `make help` and splits schema ownership |
 | Logging | **stdlib `log/slog`** + tint console / JSON file | Structured JSON since 1.21. Console stays readable locally; `logs/<service>.log` stays aggregator-friendly. No format env — both sinks always on | `zerolog`/`zap`: faster, but this service is I/O-bound on upstream calls; the difference is irrelevant here |
 | Metrics | **`prometheus/client_golang`** | De-facto standard, one line to mount `/metrics`, instantly scrapeable in a demo. Serves NFR5 | OTel metrics SDK: better long-term unification, more moving parts for the same demo |
 | Tracing | **OpenTelemetry Go SDK** | Vendor-neutral. W3C propagation means a trace spans the aggregation, and the parallel fan-out becomes *visible* as sibling spans - the clearest evidence FR3 and NFR3 are met | A vendor SDK: lock-in for no gain |
-| Testing | **stdlib `testing`, table-driven, `httptest`; `mockgen` via `go.uber.org/mock`** | Ports in `app/ports.go` are mockgen only; no hand-written fakes. Logger still uses a slog buffer | `testify`: only `require` would be used |
+| Testing | **stdlib `testing`, table-driven, `httptest`; `mockgen` via `go.uber.org/mock`; Testcontainers for integration** | Ports in `app/ports.go` are mockgen only; no hand-written fakes. Logger still uses a slog buffer. Adapter tests start Postgres 18 in a container and apply `migrations/`; they never share the compose volume | `testify`: only `require` would be used. Shared compose DB for integration: races the reviewer demo and hides migrate failures |
 | Client stub | **OpenAPI 3.1 generated by `swag`, plus curl examples and a Go harness** | Satisfies the brief's "stub the client-side layer with a test harness, cURL examples, or an API contract". Generating from handler annotations means `make openapi-check` fails in CI the moment the contract drifts from the code, which a hand-written file cannot do | Hand-written YAML: one less tool, but it goes stale silently and nothing catches it |
 | Mock upstreams | **Two separate binaries** (A5) | Real HTTP across two sockets genuinely exercises NFR2 and NFR3. Separate processes let the demo kill one outright to show FR7 | One binary with two routes: fewer processes, but weaker evidence and a clumsier outage demo |
 

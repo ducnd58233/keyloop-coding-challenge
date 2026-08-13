@@ -3,6 +3,8 @@ version: "2"
 run:
   timeout: 5m
   tests: true
+  build-tags:
+    - integration
 
 linters:
   default: standard
@@ -25,6 +27,10 @@ linters:
         linters:
           - gosec
           - noctx
+      # Isolated Testcontainers helper: fake local creds, not production secrets.
+      - path: internal/testutil/
+        linters:
+          - gosec
 
 formatters:
   enable:

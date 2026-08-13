@@ -12,6 +12,7 @@ import (
 	appmocks "github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/audit/app/mocks"
 	"github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/audit/domain"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/common"
+	"github.com/ducnd58233/unified-document-viewer/internal/testutil"
 )
 
 func TestAccessRecorderIsAppendOnly(t *testing.T) {
@@ -29,7 +30,7 @@ func TestRecordAccessHashesVINAndUsesClock(t *testing.T) {
 	rec := appmocks.NewMockAccessRecorder(ctrl)
 	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	clock := common.NewFixedClock(now)
-	const vin = "1HGCM82633"
+	const vin = testutil.TestVIN
 	const salt = "unit-test-salt"
 	wantHash, wantSuffix := common.HashVIN(salt, vin)
 

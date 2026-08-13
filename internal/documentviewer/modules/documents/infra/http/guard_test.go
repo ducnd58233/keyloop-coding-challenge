@@ -30,9 +30,9 @@ func TestWithBreakerFailFastAfterOpen(t *testing.T) {
 	inner := &countingSource{name: domain.SourceSales, err: errors.New("upstream fetch failed")}
 	cb := circuitbreaker.New(circuitbreaker.Settings{Name: "sales", Threshold: 2, Cooldown: time.Minute})
 	src := WithBreaker(inner, cb)
-	_, _ = src.Fetch(context.Background(), "1HGCM82633")
-	_, _ = src.Fetch(context.Background(), "1HGCM82633")
-	_, err := src.Fetch(context.Background(), "1HGCM82633")
+	_, _ = src.Fetch(context.Background(), testVIN)
+	_, _ = src.Fetch(context.Background(), testVIN)
+	_, err := src.Fetch(context.Background(), testVIN)
 	if !errors.Is(err, circuitbreaker.ErrOpen) {
 		t.Fatalf("err = %v, want ErrOpen", err)
 	}

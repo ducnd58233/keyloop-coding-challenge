@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/httpserver"
+	"github.com/ducnd58233/unified-document-viewer/internal/testutil"
 )
 
 func TestDoJSONOKAndRequestID(t *testing.T) {
@@ -161,7 +162,7 @@ func TestDoJSONDecodeErrorOmitsBody(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"vin":"1HGCM82633"`)
+		_, _ = io.WriteString(w, `{"vin":"`+testutil.TestVIN+`"`)
 	}))
 	t.Cleanup(srv.Close)
 
@@ -173,7 +174,7 @@ func TestDoJSONDecodeErrorOmitsBody(t *testing.T) {
 	if err == nil {
 		t.Fatal("want decode error")
 	}
-	if strings.Contains(err.Error(), "1HGCM82633") || strings.Contains(err.Error(), "localhost") {
+	if strings.Contains(err.Error(), testutil.TestVIN) || strings.Contains(err.Error(), "localhost") {
 		t.Fatalf("error leaked vin or host: %v", err)
 	}
 }

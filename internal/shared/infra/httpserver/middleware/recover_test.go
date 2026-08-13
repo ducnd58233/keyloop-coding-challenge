@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
+	"github.com/ducnd58233/unified-document-viewer/internal/testutil"
 )
 
 func TestRecoverMapsPanicToInternalError(t *testing.T) {
@@ -47,7 +48,7 @@ func TestRecoverLogOmitsPanicVIN(t *testing.T) {
 	var buf bytes.Buffer
 	log := slog.New(slog.NewTextHandler(&buf, nil))
 	h := Recover(log)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		panic("1HGCM82633")
+		panic(testutil.TestVIN)
 	}))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -55,7 +56,7 @@ func TestRecoverLogOmitsPanicVIN(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	out := buf.String()
-	if strings.Contains(out, "1HGCM82633") {
+	if strings.Contains(out, testutil.TestVIN) {
 		t.Fatalf("panic value leaked into log: %s", out)
 	}
 	if !strings.Contains(out, "panic_type") {

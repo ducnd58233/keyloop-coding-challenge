@@ -69,18 +69,19 @@ Justifications and rejected alternatives: `SYSTEM_DESIGN.md` §7. A8 fixes the p
 | Language | Go 1.26 (verified `go1.26.5`) |
 | Routing | stdlib `net/http.ServeMux` |
 | Concurrency | `golang.org/x/sync/errgroup`, `context` |
-| Persistence | PostgreSQL 17 via `jackc/pgx/v5` - **A8** |
+| Persistence | PostgreSQL 18 via `jackc/pgx/v5` - **A8** |
 | Data access | `pgx` + golang-migrate pairs in `migrations/`, applied by `make migrate-up` (not on boot) |
 | Logging | stdlib `log/slog`: tinted console + JSON file per service (`logs/<service>.log`) |
 | Metrics | `prometheus/client_golang` |
 | Tracing | OpenTelemetry Go SDK, stdout exporter |
-| Testing | stdlib `testing`, table-driven, `httptest`; `mockgen` for `app/ports.go` only |
+| Testing | stdlib `testing`, table-driven, `httptest`; `mockgen` for `app/ports.go` only; Testcontainers + `migrations/` for `//go:build integration` |
 | Contract | OpenAPI 3.1 generated from handler annotations by `swag`, drift-checked in CI |
 | Config / request ID | `godotenv` (load `.env`), `google/uuid` (`X-Request-Id` when absent) |
 
 **Dependency budget.** Runtime groups in use or planned: `godotenv`, `google/uuid`, `x/sync`,
 `jackc/pgx/v5`, `prometheus/client_golang`, `go.opentelemetry.io/otel`. Test/codegen only:
-`go.uber.org/mock` (mockgen output), `github.com/swaggo/swag/v2` (generated `api/<service>/http/docs`).
+`go.uber.org/mock` (mockgen output), `github.com/swaggo/swag/v2` (generated `api/<service>/http/docs`),
+`testcontainers-go` + `golang-migrate/v4` (integration tests only).
 Adding another requires a decision recorded in `SYSTEM_DESIGN.md` §6.9.
 
 ---
@@ -149,7 +150,7 @@ internal/
     observability/                 logger, metrics, tracing
 deployments/docker/
   Dockerfile                       multi-stage, non-root, SERVICE build-arg
-  docker-compose.infra.yaml        PostgreSQL 17 (A8)
+  docker-compose.infra.yaml        PostgreSQL 18 (A8)
   docker-compose.services.yaml     documentviewer + sales + service
   docker-compose.yaml              include infra + services (`make stack-up`)
 migrations/                        golang-migrate pairs, applied by `make migrate-up`

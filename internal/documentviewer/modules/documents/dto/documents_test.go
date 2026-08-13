@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/domain"
+	"github.com/ducnd58233/unified-document-viewer/internal/testutil"
 )
 
 func TestFromAggregateSnakeCaseSixA4Fields(t *testing.T) {
 	t.Parallel()
 	issued := time.Date(2025, 1, 4, 9, 30, 0, 0, time.UTC)
-	got := FromAggregate("1HGCM82633", "req-1", domain.AggregateResult{
+	got := FromAggregate(testutil.TestVIN, "req-1", domain.AggregateResult{
 		Documents: []domain.Document{{
 			ID:       "service:WO-77",
 			Source:   domain.SourceService,
