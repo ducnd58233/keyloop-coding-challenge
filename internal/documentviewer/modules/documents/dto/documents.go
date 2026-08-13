@@ -14,7 +14,7 @@ type ErrorBody struct {
 	Message string `json:"message,omitempty"`
 }
 
-// ErrorResponse is the client error envelope.
+// ErrorResponse is the SPEC §2 envelope; no extra fields reach the client.
 type ErrorResponse struct {
 	Error ErrorBody `json:"error"`
 }

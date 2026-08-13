@@ -28,7 +28,7 @@ type Chain struct {
 	stopped bool
 }
 
-// New does not start anything. Add hooks, then Start once.
+// New does not start anything.
 func New(log observability.Logger) *Chain {
 	return &Chain{log: log}
 }

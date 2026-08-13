@@ -28,7 +28,7 @@ func NewServiceClient(baseURL string) *ServiceClient {
 	}
 }
 
-// Name is FR4 provenance.
+// Name is FR4 provenance, not a hostname.
 func (c *ServiceClient) Name() domain.SourceName { return domain.SourceService }
 
 // Fetch never returns hostnames or the VIN in error text.

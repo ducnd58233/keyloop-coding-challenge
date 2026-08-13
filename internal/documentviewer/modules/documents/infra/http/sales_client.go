@@ -29,7 +29,7 @@ func NewSalesClient(baseURL string) *SalesClient {
 	}
 }
 
-// Name is FR4 provenance.
+// Name is FR4 provenance, not a hostname.
 func (c *SalesClient) Name() domain.SourceName { return domain.SourceSales }
 
 // Fetch never returns hostnames or the VIN in error text.

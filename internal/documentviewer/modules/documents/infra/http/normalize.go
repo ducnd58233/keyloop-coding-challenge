@@ -21,7 +21,7 @@ var knownTypes = map[string]struct{}{
 	"MOT":          {},
 }
 
-// MapType uppercases and underscores the upstream label. Unknown stays visible as OTHER.
+// MapType folds upstream labels into the closed A4 set. Unknown becomes OTHER (FR5).
 func MapType(raw string) string {
 	s := strings.ToUpper(strings.TrimSpace(raw))
 	s = strings.ReplaceAll(s, " ", "_")

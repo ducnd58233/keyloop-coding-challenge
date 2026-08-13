@@ -1068,7 +1068,7 @@ the cache.
 |---|---|---|
 | Instances | Single | Stateless: scale horizontally behind a load balancer, no code change |
 | Cache | Postgres, shared across instances | Already correct for multiple instances. Move to Redis when cache reads start competing with audit writes for connections; the port already exists, so this is one adapter and no domain change |
-| Upstream protection | Per-source timeout (NFR2), single retry on transport error | Per-source circuit breaker, so a hard-down system stops consuming the latency budget on every request. Deliberately deferred, §9.5 |
+| Upstream protection | Per-source timeout (NFR2), one retry on transport/5xx, per-source circuit breaker | Tune breaker threshold/cooldown; a third source still only needs a new adapter |
 | Cache stampede | None | `golang.org/x/sync/singleflight` collapses concurrent identical VIN lookups into one fan-out |
 | Connection reuse | Tuned `http.Transport`, `MaxIdleConnsPerHost` above the default of 2 | Per-source transports so one saturated upstream cannot starve the other's pool |
 | Payload size | Full list (A11 volumes) | Cursor pagination on `issued_at` |
@@ -1111,11 +1111,11 @@ Concurrency tests run under `-race`.
 
 ### 9.5 Deliberately deferred
 
-Stated so absence reads as decision rather than oversight: circuit breakers (timeouts and retry caps
-suffice at two sources); `singleflight` (no stampede at demo volumes); authentication (A2, out of
-scope); document streaming (A11, out of scope); pagination (not needed at A11 volumes); Redis
-(Postgres already serves the cache correctly across instances, so a second datastore buys nothing
-yet); read replicas; OTLP collector deployment (§8.1 Level D).
+Stated so absence reads as decision rather than oversight: `singleflight` (no stampede at demo
+volumes); authentication (A2, out of scope); document streaming (A11, out of scope); pagination
+(not needed at A11 volumes); Redis (Postgres already serves the cache correctly across instances,
+so a second datastore buys nothing yet); read replicas; OTLP collector deployment (§8.1 Level D).
+Circuit breakers shipped in T6 (one breaker per `DocumentSource`, fail-fast, NFR1 isolation).
 
 ### 9.6 What would reopen the architecture decision
 
@@ -1128,7 +1128,7 @@ Recording the triggers keeps §2.9 and §8.1 reviewable rather than calcified.
 | Cross-vehicle search or document analytics is required | Option 4 (persisted index) |
 | A UI is built and perceived latency matters | Option 5 (streaming) - the aggregator core is unchanged, only the writer differs |
 | More than one service instance | Replace the Postgres `DocumentCache` adapter with Redis; the port already exists |
-| An upstream goes hard-down for extended periods | Add a per-source circuit breaker so it stops consuming the latency budget |
+| An upstream stays hard-down longer than the breaker cooldown | Raise threshold/cooldown; the per-source breaker already exists |
 | A production deployment target appears | Observability Level D (§8.1) |
 
 ---
