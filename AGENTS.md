@@ -4,6 +4,14 @@ Go backend for Scenario D: one VIN lookup that queries two mocked back-office sy
 normalises two dissimilar payloads into a single document model, and stays useful when one upstream
 is down.
 
+<scope>
+
+This file is how code is written here. It is not the product spec and not the command list.
+
+</scope>
+
+<precedence>
+
 ## Where things live
 
 Three homes, no overlap. Look in the right one, and add to the right one.
@@ -21,16 +29,25 @@ only; requirements change in `DRAFT.md` only.
 Identifiers are greppable: `FR*`, `NFR*`, `A*` are requirements and assumptions in `DRAFT.md`;
 `DD-*` are design decisions in `SYSTEM_DESIGN.md`; `R*` are the rules below.
 
+</precedence>
+
+<verification>
+
 ## Definition of done
 
 `make lint`, `make test-race` and `make openapi-check` all pass. Nothing is finished before that.
+If `test-race` cannot run (no cgo), say **UNVERIFIED**. Do not report a skipped race gate as a pass.
+
+</verification>
+
+<required>
 
 ## Architectural rules
 
 **R1 - Modules interact only through ports.** A module never imports another module's packages. If
 one needs something another owns, it declares an interface in its own `app/ports.go` and the
 composition root injects an adapter. An import between modules is invisible coupling that compiles
-fine and makes both untestable in isolation.
+fine and makes both untestable in isolation. A binary never imports `internal/<other-service>/`.
 
 **R2 - Dependencies point one way.** `api` → `app` → `domain`. `infra` implements the ports declared
 in `app`. `domain` imports nothing from the layers above it, and `shared` never imports `modules`.
@@ -62,43 +79,30 @@ failure (FR8). The rule still holds.
 adapters. SQL leaking upward is how a database-agnostic design quietly becomes database-shaped.
 
 **R6 - Each binary has one composition root.** `internal/<service>/app/` constructs every adapter
-for that binary and wires it to a port. Modules for that binary live in
-`internal/<service>/modules/<module>/`. `cmd/<service>` only handles signals. One directory per
-running system to read, one directory to change to swap an implementation.
+for that binary (logger, HTTP server, DB pool, upstream clients, handlers) and wires it to a port.
+Modules for that binary live in `internal/<service>/modules/<module>/`. `cmd/<service>` parses flags
+and installs signal handlers. It does not call `NewLogger`, open a database, or build an
+`http.Handler`. After `Run` returns, `main` may print to stderr; it must not log through a logger
+`Run` already closed. One directory per running system to read, one directory to change to swap an
+implementation.
 
-## Code style
-
-- `gofmt` is authoritative; `golangci-lint` must be clean.
-- `context.Context` is the first parameter of anything that performs or bounds I/O.
-- Declare interfaces in the consuming package (`app/ports.go`), never beside the implementation.
-- Wrap errors with `%w`. Put sentinel errors in `domain/` when callers branch on them.
-- Table-driven tests, colocated with the code they cover. Hand-written fakes are fine for ports this
-  small; `make generate` runs `mockgen` if one grows.
-- Name things after the domain, not the pattern: `documents.Aggregate`, not `DocumentServiceImpl`.
-- Comments explain *why*. No commented-out code, no banner art.
-
-## Boundaries
-
-**Always**
+## Always
 
 - Obey R1-R6; they are review gates, not preferences.
-- Read every environment variable in `configs/` and nowhere else.
+- Read every environment variable in `configs/` and nowhere else. Mock outage and live chaos are
+  process flags on the mock binaries, not `.env` keys.
 - Regenerate and commit the contract when a handler or DTO changes (`make openapi`).
 - Write an audit record for every request, including rejected and failed ones (FR8).
 - Return the `sources[]` per-source status array on every aggregate response (FR7).
-- Run commands through their real CLI — `make <target>` when one exists (`make help` lists them),
+- Run commands through their real CLI. `make <target>` when one exists (`make help` lists them),
   the tool's own CLI otherwise.
+- Log listen/start only after bind succeeds.
 
-**Ask first**
+## Never
 
-- Any `git commit`, push, branch deletion or pull request.
-- Adding a dependency, or any exception to R1-R6.
-- Editing `docs/design/DRAFT.md` - it is the source of truth, not a working file.
-- Changing the public API contract once `api/<service>/http/docs/` exists.
-
-**Never**
-
-- Log, trace or label a full VIN. Use the last 4 characters plus a salted hash instead.
+- Log, trace or label a full VIN. Do not log `r.URL.Path`, `r.RequestURI`, raw query strings, or
+  path values that contain a VIN. Use a constant route template plus the last 4 characters
+  (`vin_suffix`); salted hash when an identifier must reach audit or traces.
 - Return internal error detail, hostnames, driver errors or stack traces to a client. Map upstream
   failures to the fixed error code set instead.
 - Cache a partial or degraded result (NFR6). Write to cache only when every source succeeded.
@@ -109,7 +113,58 @@ running system to read, one directory to change to swap an implementation.
 - Hand-type or recall a command from memory when a CLI can produce or verify it. Flags and syntax
   drift between tool versions; `make help` and the tool's own `--help` are authoritative, memory
   is not.
-- Suppress a linter with `//nolint` or an equivalent ignore. Fix the code.
+- Suppress a linter with `//nolint`, `#nosec`, an ignore file, or a weaker file mode to silence
+  gosec. Fix the code (`0o750` dirs, `0o600` log files, `os.OpenRoot` for variable paths).
+- Add a `Co-authored-by` line or any AI trailer to a commit.
+- Call `os.Exit` while a logger, DB, or listener still needs `Close`. The composition root `defer`s
+  Close; `os.Exit` skips that.
+
+</required>
+
+<rules>
+
+## Code style
+
+- `gofmt` is authoritative; `golangci-lint` must be clean.
+- `context.Context` is the first parameter of anything that performs or bounds I/O. Request-scoped
+  wait, dial, upstream call, and shutdown take the request or signal context, not
+  `context.Background()` or `context.TODO()`. Tests that need a non-cancelled ctx may use Background.
+- Declare interfaces in the consuming package (`app/ports.go`), never beside the implementation.
+- Wrap errors with `%w`. Put sentinel errors in `domain/` when callers branch on them.
+- Table-driven tests, colocated with the code they cover. Hand-written fakes are fine for ports this
+  small; `make generate` runs `mockgen` only for `app/ports.go`. Do not mockgen `Logger`. VIN and
+  log-redaction assertions use `slog.NewTextHandler` on a `bytes.Buffer`.
+- Name things after the domain, not the pattern: `documents.Aggregate`, not `DocumentServiceImpl`.
+- Comments explain *why* (constraint, trap, requirement id). Do not restate the next line. Exported
+  godoc that revive requires starts with the identifier and states a constraint, not a paraphrase.
+- No commented-out code, no banner art, no emoji, no em-dash in comments or commit messages.
+- Mock randomness goes through `internal/shared/randutil` (`crypto/rand`). Do not import `math/rand`.
+
+</rules>
+
+<escalation>
+
+## Ask first
+
+- Any `git commit`, push, branch deletion or pull request.
+- Adding a dependency, or any exception to R1-R6.
+- Editing `docs/design/DRAFT.md` - it is the source of truth, not a working file.
+- Changing the public API contract once `api/<service>/http/docs/` exists.
+
+</escalation>
+
+<antipatterns>
+
+## Traps already paid for
+
+These compiled, or the happy path stayed green. Do not reintroduce them.
+
+- **`r.URL.Path` in mock logs** leaked the full VIN on the Service route. Route template + `vin_suffix`.
+- **Logger constructed in `cmd/`** violated R6; `os.Exit(1)` skipped `Close`.
+- **`context.Background()` on a timeout hang** made request cancel a no-op.
+- **`math/rand` + `//nolint:gosec`** instead of `randutil`.
+- **mockgen / `Capture` for `Logger`** cannot assert redaction. Use a slog text buffer.
+- **`http server started` before `Listen`** reported a bound port that never accepted.
 
 ## Before you write the aggregator
 
@@ -118,3 +173,5 @@ source failure from a goroutine aborts the healthy sibling and the service retur
 whenever either upstream is unhealthy - the exact inverse of NFR1. It fails silently; happy-path
 tests stay green. Read `SYSTEM_DESIGN.md` DD-2 before touching the fan-out, and keep the isolation
 test as a gate.
+
+</antipatterns>
