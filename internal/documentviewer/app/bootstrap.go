@@ -6,22 +6,27 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 
 	"github.com/ducnd58233/unified-document-viewer/configs"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/httpserver"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
 
-// Run loads configuration, wires the process, and serves until ctx is
-// cancelled (SIGINT/SIGTERM from cmd/documentviewer).
+// Run is the composition root; cmd/ only handles signals (R6).
 func Run(ctx context.Context) error {
 	cfg, err := configs.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	logger := observability.NewLogger(cfg.Log.Level, os.Stdout)
+	logger, logClose, err := observability.NewLogger(observability.Options{
+		Service: "documentviewer",
+		Level:   cfg.Log.Level,
+	})
+	if err != nil {
+		return fmt.Errorf("logger: %w", err)
+	}
+	defer func() { _ = logClose.Close() }()
 	slog.SetDefault(logger)
 
 	handler := mountHTTP(httpDeps{cfg: cfg, log: logger})

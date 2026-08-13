@@ -42,7 +42,7 @@ SWAG_SERVICE = cmd/service,internal/service/modules/service
 
 .DEFAULT_GOAL := help
 
-.PHONY: help tools run mocks dev demo-degraded \
+.PHONY: help tools run mocks dev dev-stop demo-degraded \
 	test test-race test-integration cover vet fmt tidy lint \
 	generate mocks-gen mocks-gen-documentviewer mocks-gen-sales mocks-gen-service \
 	openapi openapi-check openapi-documentviewer openapi-sales openapi-service \
@@ -83,23 +83,45 @@ $(SWAG):
 run: ## Run the document-viewer API alone (expects db + mocks already up)
 	$(GO) run ./cmd/documentviewer
 
+# Built binaries (not `go run`) so Ctrl+C / trap hits the listener, not a wrapper
+# that leaves the compiled exe bound on Windows.
 # Both mock upstreams, foreground. Use a second terminal, or use `make dev`.
-mocks: ## Run both mock upstreams in the foreground
-	$(GO) run ./cmd/sales -addr $(SALES_ADDR) & \
-	$(GO) run ./cmd/service -addr $(SERVICE_ADDR) & \
-	wait
+mocks: build ## Run both mock upstreams until Ctrl+C
+	@pids=""; \
+	cleanup() { for pid in $$pids; do kill -TERM $$pid 2>/dev/null || true; done; wait 2>/dev/null || true; }; \
+	trap cleanup INT TERM EXIT; \
+	./bin/sales$(EXE) -addr $(SALES_ADDR) & pids="$$pids $$!"; \
+	./bin/service$(EXE) -addr $(SERVICE_ADDR) & pids="$$pids $$!"; \
+	wait $$pids
 
 # The one command a reviewer needs: database, schema, mocks, API.
-dev: infra-up migrate-up ## db + migrations + both mocks + API. The one command to run the system
-	$(GO) run ./cmd/sales -addr $(SALES_ADDR) & \
-	$(GO) run ./cmd/service -addr $(SERVICE_ADDR) & \
-	$(GO) run ./cmd/documentviewer
+dev: infra-up migrate-up build ## db + migrations + both mocks + API. Ctrl+C stops all three
+	@pids=""; \
+	cleanup() { for pid in $$pids; do kill -TERM $$pid 2>/dev/null || true; done; wait 2>/dev/null || true; }; \
+	trap cleanup INT TERM EXIT; \
+	./bin/sales$(EXE) -addr $(SALES_ADDR) & pids="$$pids $$!"; \
+	./bin/service$(EXE) -addr $(SERVICE_ADDR) & pids="$$pids $$!"; \
+	./bin/documentviewer$(EXE) & pids="$$pids $$!"; \
+	wait $$pids
 
 # Same, with the Service upstream forced down, to demonstrate FR7 partial results.
-demo-degraded: infra-up migrate-up ## Same as dev but with the Service upstream down (demonstrates FR7)
-	$(GO) run ./cmd/sales -addr $(SALES_ADDR) & \
-	$(GO) run ./cmd/service -addr $(SERVICE_ADDR) -down & \
-	$(GO) run ./cmd/documentviewer
+demo-degraded: infra-up migrate-up build ## Same as dev but with the Service upstream down (demonstrates FR7)
+	@pids=""; \
+	cleanup() { for pid in $$pids; do kill -TERM $$pid 2>/dev/null || true; done; wait 2>/dev/null || true; }; \
+	trap cleanup INT TERM EXIT; \
+	./bin/sales$(EXE) -addr $(SALES_ADDR) & pids="$$pids $$!"; \
+	./bin/service$(EXE) -addr $(SERVICE_ADDR) -down & pids="$$pids $$!"; \
+	./bin/documentviewer$(EXE) & pids="$$pids $$!"; \
+	wait $$pids
+
+dev-stop: ## Kill leftover sales/service/documentviewer (and old mock-*) processes
+ifeq ($(OS),Windows_NT)
+	@powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $$_.Name -match '^(sales|service|documentviewer|mock-sales|mock-service|api)\.exe$$' } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue }"
+else
+	-@pkill -TERM -x sales$(EXE) || true
+	-@pkill -TERM -x service$(EXE) || true
+	-@pkill -TERM -x documentviewer$(EXE) || true
+endif
 
 # ---------------------------------------------------------------------------
 # Test / quality

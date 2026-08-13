@@ -1,17 +1,16 @@
-// Command service serves the Service System mock on :9101 (A5).
+// Command service is the Service upstream mock (A5).
 package main
 
 import (
 	"context"
 	"errors"
 	"flag"
-	"log/slog"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
 	app "github.com/ducnd58233/unified-document-viewer/internal/service/app"
-	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
 
 func main() {
@@ -24,15 +23,13 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	logger := observability.NewLogger("info", os.Stdout)
 	if err := app.Run(ctx, app.RunOptions{
 		Addr:          *addr,
 		BaseURL:       *baseURL,
 		Down:          *down,
 		Deterministic: *deterministic,
-		Log:           logger,
 	}); err != nil && !errors.Is(err, context.Canceled) {
-		logger.Error("service mock stopped", slog.Any("error", err))
+		fmt.Fprintf(os.Stderr, "service mock stopped: %v\n", err)
 		os.Exit(1)
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
 
-// Options wires fault injection and optional random documents for unknown VINs.
+// Options keeps Generate off when Down, or unknown VINs look healthy during outage.
 type Options struct {
 	Fault    mockfault.Config
 	Generate bool
@@ -18,7 +18,7 @@ type Options struct {
 	Log      observability.Logger
 }
 
-// New serves GET /healthz and GET /sales/v1/documents?vin= (SYSTEM_DESIGN §5.1).
+// New is the Sales mock HTTP surface (A5).
 func New(opt Options) http.Handler {
 	s := server{fault: opt.Fault, generate: opt.Generate, intN: opt.IntN, log: opt.Log}
 	mux := http.NewServeMux()

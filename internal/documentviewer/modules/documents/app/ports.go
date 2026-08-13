@@ -10,13 +10,13 @@ import (
 	"github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/domain"
 )
 
-// DocumentSource is one upstream back-office system (SYSTEM_DESIGN §3.2).
+// DocumentSource is one upstream; failures must not cancel the sibling (NFR1).
 type DocumentSource interface {
 	Name() domain.SourceName
 	Fetch(ctx context.Context, vin string) ([]domain.Document, error)
 }
 
-// CacheStore is the TTL document cache (FR9, FR10, NFR6, NFR7).
+// CacheStore must not persist partial aggregates (NFR6).
 type CacheStore interface {
 	Lookup(ctx context.Context, vin string) (domain.CachedResult, bool, error)
 	Store(ctx context.Context, vin string, r domain.AggregateResult, ttl time.Duration) error

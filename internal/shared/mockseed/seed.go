@@ -2,40 +2,33 @@
 // Payloads stay in each mock package so the §5.3 shapes cannot accidentally converge.
 package mockseed
 
-// Kind says which upstreams hold documents for a seeded VIN.
+// Kind is which upstreams hold documents for a seeded VIN.
 type Kind string
 
+// KindNone is FR6 (both empty). SalesOnly/ServiceOnly are FR7 partial.
 const (
-	// KindBoth means both upstreams return documents.
-	KindBoth Kind = "both"
-	// KindSalesOnly means only the sales mock returns documents.
-	KindSalesOnly Kind = "sales"
-	// KindServiceOnly means only the service mock returns attachments.
+	KindBoth        Kind = "both"
+	KindSalesOnly   Kind = "sales"
 	KindServiceOnly Kind = "service"
-	// KindNone means both upstreams return empty lists (FR6).
-	KindNone Kind = "none"
+	KindNone        Kind = "none"
 )
 
-// VIN is one seeded vehicle. Value is 10 characters (A1).
+// VIN Value is 10 characters (A1).
 type VIN struct {
 	Value string
 	Kind  Kind
 }
 
+// Named VINs are fixtures: §5.3 example, FR6 empty, FR7 one-sided.
 const (
-	// WithDocumentsA has records in both Sales and Service (SYSTEM_DESIGN §5.3 example VIN).
 	WithDocumentsA = "1HGCM82633"
-	// WithDocumentsB has different document types on each upstream.
 	WithDocumentsB = "2T1BURHE40"
-	// WithNone has zero documents on both upstreams (FR6).
-	WithNone = "3N1AB7AP1D"
-	// SalesOnly has sales records and an empty service list (FR7 partial).
-	SalesOnly = "JHMCM56557"
-	// ServiceOnly has service attachments and an empty sales list (FR7 partial).
-	ServiceOnly = "WBA3A5C59E"
+	WithNone       = "3N1AB7AP1D"
+	SalesOnly      = "JHMCM56557"
+	ServiceOnly    = "WBA3A5C59E"
 )
 
-// All is the shared seed set. Length is part of the contract: at least 20 VINs.
+// All must stay at least 20 entries (seed contract).
 var All = []VIN{
 	{Value: WithDocumentsA, Kind: KindBoth},
 	{Value: WithDocumentsB, Kind: KindBoth},
@@ -60,17 +53,17 @@ var All = []VIN{
 	{Value: "8AJBA3F59A", Kind: KindBoth},
 }
 
-// HasSales reports whether the sales mock should return documents.
+// HasSales is true for KindBoth and KindSalesOnly.
 func HasSales(k Kind) bool {
 	return k == KindBoth || k == KindSalesOnly
 }
 
-// HasService reports whether the service mock should return attachments.
+// HasService is true for KindBoth and KindServiceOnly.
 func HasService(k Kind) bool {
 	return k == KindBoth || k == KindServiceOnly
 }
 
-// Suffix returns the last 4 characters for logs. Never log the full VIN (SPEC §8).
+// Suffix is the last 4 characters. Never log the full VIN (SPEC §8).
 func Suffix(vin string) string {
 	if len(vin) <= 4 {
 		return vin

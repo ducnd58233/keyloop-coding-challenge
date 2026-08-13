@@ -8,50 +8,50 @@ import (
 	"time"
 )
 
-func TestInterceptDown(t *testing.T) {
+func TestApplyDown(t *testing.T) {
 	rec := httptest.NewRecorder()
-	cfg := Config{Down: true}
-	if !cfg.Intercept(rec) {
-		t.Fatal("Intercept() = false, want true when Down")
+	got := Config{Down: true}.Apply(context.Background(), rec)
+	if !got.Stop || got.Kind != KindDown {
+		t.Fatalf("Apply = %+v, want down stop", got)
 	}
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rec.Code)
 	}
 }
 
-func TestInterceptErrorRateHit(t *testing.T) {
+func TestApplyErrorRateHit(t *testing.T) {
 	rec := httptest.NewRecorder()
-	cfg := Config{ErrorRate: 1, Random: func() float64 { return 0 }}
-	if !cfg.Intercept(rec) {
-		t.Fatal("Intercept() = false, want true when Random < ErrorRate")
+	got := Config{ErrorRate: 1, Random: func() float64 { return 0 }}.Apply(context.Background(), rec)
+	if !got.Stop || got.Kind != KindError {
+		t.Fatalf("Apply = %+v, want error stop", got)
 	}
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
 	}
 }
 
-func TestInterceptErrorRateMiss(t *testing.T) {
+func TestApplyErrorRateMiss(t *testing.T) {
 	rec := httptest.NewRecorder()
-	cfg := Config{ErrorRate: 0.5, Random: func() float64 { return 0.9 }}
-	if cfg.Intercept(rec) {
-		t.Fatal("Intercept() = true, want false when Random >= ErrorRate")
+	got := Config{ErrorRate: 0.5, Random: func() float64 { return 0.9 }}.Apply(context.Background(), rec)
+	if got.Stop {
+		t.Fatalf("Apply = %+v, want continue", got)
 	}
 	if rec.Code != http.StatusOK && rec.Code != 0 {
 		t.Fatalf("status = %d, want unset", rec.Code)
 	}
 }
 
-func TestInterceptTimeout(t *testing.T) {
+func TestApplyTimeout(t *testing.T) {
 	var slept time.Duration
 	rec := httptest.NewRecorder()
-	cfg := Config{
+	got := Config{
 		TimeoutRate: 1,
 		TimeoutFor:  3 * time.Second,
 		Random:      func() float64 { return 0 },
 		Sleep:       func(d time.Duration) { slept = d },
-	}
-	if !cfg.Intercept(rec) {
-		t.Fatal("Intercept() = false, want true on timeout")
+	}.Apply(context.Background(), rec)
+	if !got.Stop || got.Kind != KindTimeout {
+		t.Fatalf("Apply = %+v, want timeout stop", got)
 	}
 	if slept != 3*time.Second {
 		t.Fatalf("slept = %s, want 3s", slept)
@@ -61,15 +61,38 @@ func TestInterceptTimeout(t *testing.T) {
 	}
 }
 
-func TestInterceptLatency(t *testing.T) {
+func TestApplyTimeoutRespectsCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	rec := httptest.NewRecorder()
+	got := Config{
+		TimeoutRate: 1,
+		TimeoutFor:  3 * time.Second,
+		Random:      func() float64 { return 0 },
+	}.Apply(ctx, rec)
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("Apply ignored cancel; elapsed %s", elapsed)
+	}
+	if got.Kind != KindTimeout || !got.Stop {
+		t.Fatalf("Apply = %+v, want timeout stop", got)
+	}
+}
+
+func TestApplyLatency(t *testing.T) {
 	var slept time.Duration
 	rec := httptest.NewRecorder()
-	cfg := Config{
+	got := Config{
 		Latency: 150 * time.Millisecond,
 		Sleep:   func(d time.Duration) { slept = d },
-	}
-	if cfg.Intercept(rec) {
-		t.Fatal("Intercept() = true, want false")
+	}.Apply(context.Background(), rec)
+	if got.Stop {
+		t.Fatalf("Apply = %+v, want continue", got)
 	}
 	if slept != 150*time.Millisecond {
 		t.Fatalf("slept = %s, want 150ms", slept)

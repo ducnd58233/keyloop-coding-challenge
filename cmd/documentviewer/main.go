@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log/slog"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,7 +16,7 @@ func main() {
 	defer stop()
 
 	if err := app.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		slog.Error("application stopped", slog.Any("error", err))
+		fmt.Fprintf(os.Stderr, "application stopped: %v\n", err)
 		os.Exit(1)
 	}
 }

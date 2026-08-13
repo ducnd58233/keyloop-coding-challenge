@@ -20,30 +20,26 @@ const (
 	DefaultLatencyHigh = 2500 * time.Millisecond
 )
 
-// Kind is the fault bucket chosen for one request.
+// Kind is the Apply outcome written to mock logs.
 type Kind string
 
+// Kind values match log field "fault".
 const (
-	// KindOK is a fast success with no injected delay.
-	KindOK Kind = "ok"
-	// KindDown is a full outage (503).
-	KindDown Kind = "down"
-	// KindError is a random 500.
-	KindError Kind = "error"
-	// KindTimeout hangs past the per-source budget and writes no body.
-	KindTimeout Kind = "timeout"
-	// KindLatency delays then continues to a success body.
+	KindOK      Kind = "ok"
+	KindDown    Kind = "down"
+	KindError   Kind = "error"
+	KindTimeout Kind = "timeout" // hang; no body. Client timeout is the bound.
 	KindLatency Kind = "latency"
 )
 
-// Result is what Apply did: kind, delay applied, and whether the handler must stop.
+// Result tells the handler whether to stop writing a success body.
 type Result struct {
 	Kind    Kind
 	Latency time.Duration
 	Stop    bool
 }
 
-// Config is the T3 fault-injection surface.
+// Config Sleep and Random are test hooks so chaos tests do not wait on real time.
 type Config struct {
 	Latency        time.Duration
 	LatencyRate    float64
@@ -58,7 +54,7 @@ type Config struct {
 	RandomDuration func() time.Duration
 }
 
-// Live returns per-request random success / latency / 500 / timeout. Not read from env.
+// Live is per-request chaos. Not read from the environment.
 func Live() Config {
 	return Config{
 		ErrorRate:   DefaultErrorRate,
@@ -110,7 +106,7 @@ func (c Config) wait(ctx context.Context, d time.Duration) {
 	}
 }
 
-// Apply maybe delays or short-circuits the request. Callers log Result then stop if Stop.
+// Apply records the fault as data; a timeout must not cancel the sibling source (NFR1).
 func (c Config) Apply(ctx context.Context, w http.ResponseWriter) Result {
 	if c.Down {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -145,9 +141,4 @@ func (c Config) Apply(ctx context.Context, w http.ResponseWriter) Result {
 		return Result{Kind: KindLatency, Latency: c.Latency}
 	}
 	return Result{Kind: KindOK}
-}
-
-// Intercept is Apply().Stop for call sites that only need the short-circuit bit.
-func (c Config) Intercept(w http.ResponseWriter) bool {
-	return c.Apply(context.Background(), w).Stop
 }

@@ -13,19 +13,24 @@ import (
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
 
-// RunOptions is the process flag surface. Faults are not read from the environment.
+// RunOptions is CLI only; faults are not read from the environment.
 type RunOptions struct {
 	Addr          string
 	Down          bool
 	Deterministic bool
-	Log           observability.Logger
 }
 
-// Run wires the sales mock and serves until ctx is cancelled.
+// Run is the composition root; cmd/ only handles signals (R6).
 func Run(ctx context.Context, opt RunOptions) error {
-	if opt.Log == nil {
-		return fmt.Errorf("sales: logger is required")
+	logger, logClose, err := observability.NewLogger(observability.Options{
+		Service: "sales",
+		Level:   "info",
+	})
+	if err != nil {
+		return fmt.Errorf("logger: %w", err)
 	}
+	defer func() { _ = logClose.Close() }()
+
 	addr := opt.Addr
 	if addr == "" {
 		addr = ":9100"
@@ -38,7 +43,7 @@ func Run(ctx context.Context, opt RunOptions) error {
 		generate = true
 	}
 
-	opt.Log.Info("sales mock listening",
+	logger.Info("sales mock listening",
 		slog.String("addr", addr),
 		slog.Bool("down", opt.Down),
 		slog.Bool("deterministic", opt.Deterministic),
@@ -51,8 +56,9 @@ func Run(ctx context.Context, opt RunOptions) error {
 	)
 
 	h := middleware.Chain(
-		sales.New(sales.Options{Fault: fault, Generate: generate, Log: opt.Log}),
+		sales.New(sales.Options{Fault: fault, Generate: generate, Log: logger}),
 		middleware.RequestID,
+		middleware.Recover(logger),
 	)
-	return httpserver.Serve(ctx, addr, h, opt.Log)
+	return httpserver.Serve(ctx, addr, h, logger)
 }

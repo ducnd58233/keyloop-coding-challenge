@@ -11,7 +11,6 @@ import (
 
 const defaultBaseURL = "http://localhost:9101"
 
-// Nested camelCase attachments, RFC3339 dates, absolute file.uri (SYSTEM_DESIGN §5.3).
 type file struct {
 	URI string `json:"uri"`
 }

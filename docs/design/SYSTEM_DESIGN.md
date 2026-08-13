@@ -360,7 +360,7 @@ flowchart TB
     end
 
     DB[("PostgreSQL 17<br/>document_cache<br/>search_audit")]
-    OBS["Observability sinks<br/>stdout JSON, /metrics, OTel exporter"]
+    OBS["Observability sinks<br/>tinted console + JSON file, /metrics, OTel exporter"]
 
     clients --> MW
     ADP -->|"parallel HTTP, 2s per-source budget"| SALES
@@ -558,7 +558,7 @@ environment variable is read and defaulted.
 | **Cache repository**<br/>`documentviewer/modules/documents/infra/persistence` | TTL reads and writes, stale lookup on total failure (FR9, FR10) | The policy of *when* to write - that is the use case (NFR6) |
 | **Audit use case + repository**<br/>`documentviewer/modules/audit` | Records one access event per request, including rejected and failed ones (FR8); exposes no update or delete path (NFR8) | Anything on the documents request path. It is invoked by the HTTP layer, not by the aggregator |
 | **Postgres infrastructure**<br/>`shared/infra/postgres` | Connection pool and the Unit of Work that carries a transaction boundary (A8, R4). Schema is owned by `migrations/` and applied by `make migrate-up`, not by the application | Interpreting the business meaning of what it stores, and deciding transaction scope - that is the use case's job |
-| **Observability**<br/>`shared/observability` | Builds the JSON logger, registers Prometheus collectors, configures the OTel tracer and propagator (NFR5) | Deciding what is worth logging - callers pass fields |
+| **Observability**<br/>`shared/observability` | Builds the process logger (tinted console + JSON `logs/<service>.log`), registers Prometheus collectors, configures the OTel tracer and propagator (NFR5) | Deciding what is worth logging - callers pass fields |
 | **Mock servers**<br/>`cmd/sales`, `cmd/service` | Serve two deliberately dissimilar API shapes over real HTTP; live chaos is success / random latency / 500 / timeout hang; structured logs use `vin_suffix` only (A5) | Realism beyond payload shape and failure behaviour |
 
 ---
@@ -857,7 +857,7 @@ A8 fixes the persistence choice. The rest is derived.
 | Concurrency | **`golang.org/x/sync/errgroup`** | Reviewed implementation of bounded fan-out with cancellation. Used carefully per DD-2 | Hand-rolled `WaitGroup` + channels: more code, more ways to leak a goroutine |
 | Persistence | **PostgreSQL 17 via `pgx/v5`** | **A8 specifies this.** Real transactions, so the transaction rule R4 is demonstrable rather than theoretical; a real connection pool to reason about under load; `jsonb` for the cached payload. Shipped in `deployments/docker/docker-compose.yaml` so `make dev` is one command, not a provisioning exercise (K5) | **SQLite**: zero setup, but no pooling, and an embedded database sidesteps the operational questions the brief's "scalability, reliability" line is asking about. **MongoDB**: a natural fit for the cached document payload and TTL indexes, but multi-document transactions need a replica set, which complicates compose for the one capability R4 depends on |
 | Data access | **`pgx/v5` + golang-migrate via `make migrate-up`** | Two tables. Explicit SQL is shorter and more reviewable than any abstraction over it, and `pgx` exposes the pool statistics the scalability section relies on. Schema lives in `migrations/` and is applied by the Makefile, not on process boot, so `make help` is the single place a reviewer looks | GORM: obscures emitted queries, large dependency, solves a problem this schema does not have. `database/sql`: portable, but gives up pgx's pool introspection and native `jsonb` handling. `embed` on boot: hides the migration step from `make help` and splits schema ownership |
-| Logging | **stdlib `log/slog`** | Structured JSON in the stdlib since 1.21. Context-aware handlers attach request and trace IDs automatically. Serves NFR5 with zero dependencies | `zerolog`/`zap`: faster, but this service is I/O-bound on upstream calls; the difference is irrelevant here |
+| Logging | **stdlib `log/slog`** + tint console / JSON file | Structured JSON since 1.21. Console stays readable locally; `logs/<service>.log` stays aggregator-friendly. No format env — both sinks always on | `zerolog`/`zap`: faster, but this service is I/O-bound on upstream calls; the difference is irrelevant here |
 | Metrics | **`prometheus/client_golang`** | De-facto standard, one line to mount `/metrics`, instantly scrapeable in a demo. Serves NFR5 | OTel metrics SDK: better long-term unification, more moving parts for the same demo |
 | Tracing | **OpenTelemetry Go SDK** | Vendor-neutral. W3C propagation means a trace spans the aggregation, and the parallel fan-out becomes *visible* as sibling spans - the clearest evidence FR3 and NFR3 are met | A vendor SDK: lock-in for no gain |
 | Testing | **stdlib `testing`, table-driven, `httptest`; `mockgen` via `go.uber.org/mock`** | Ports in `app/ports.go` are generated, not hand-written. Small fakes remain allowed | `testify`: only `require` would be used |
@@ -891,7 +891,7 @@ That is why the instrumentation level is chosen deliberately rather than default
 
 ### 8.2 Structured logging
 
-`log/slog`, JSON to stdout, one event per request plus one per upstream call. Every line carries
+`log/slog`, tinted console plus JSON to `logs/<service>.log`, one event per request plus one per upstream call. Every line carries
 `request_id` and `trace_id`, joining logs, traces and the audit table (which stores both, per
 `DRAFT.md` §5.2).
 
@@ -1016,7 +1016,7 @@ own number instead of hiding inside one blended figure.
 
 | Sink | Contains | Control |
 |---|---|---|
-| stdout logs | VIN suffix + salted hash, source status, latency, request/trace ID | Full VIN, document titles and URLs never logged |
+| console + `logs/<service>.log` | VIN suffix + salted hash, source status, latency, request/trace ID | Full VIN, document titles and URLs never logged |
 | HTTP response body | Documents for the requested VIN, per-source status, error **codes** | Upstream error strings mapped to a fixed code set; no internal hostnames, driver errors or stack traces |
 | `search_audit` | Hashed VIN, VIN suffix, actor, outcome, timings (`DRAFT.md` §5.2) | Access-controlled with the database; no document content |
 | `document_cache` | Document **metadata** only (A11) | No document bytes; TTL-bounded |
@@ -1106,7 +1106,7 @@ module's slice carries its own proof.
 | Cancellation | Client disconnect propagates; no goroutine leak | NFR4 |
 | Cache policy | Hit, miss, expiry, stale-served; partial never written; read error falls through to upstreams | FR9, FR10, NFR6, NFR7 |
 | Audit | A record is written on success, partial, invalid VIN and total failure; no update or delete path exists | FR8, NFR8 |
-| Redaction | Captured log output contains the suffix and never the full VIN | §8.2 |
+| Redaction | slog buffer output contains the suffix and never the full VIN | §8.2 |
 | HTTP layer | Status selection matches §5.4; DTO shape; empty list for unknown VIN | FR1, FR6 |
 | End to end | Both real mock servers with fault injection; kill one and observe `partial: true` | FR2, FR7, A5 |
 

@@ -2,7 +2,6 @@ package app
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,7 +10,7 @@ import (
 )
 
 func TestHealthEndpoints(t *testing.T) {
-	h := mountHTTP(httpDeps{log: observability.NewLogger("error", io.Discard)})
+	h := mountHTTP(httpDeps{log: observability.Discard()})
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 

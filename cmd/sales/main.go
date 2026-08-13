@@ -1,17 +1,16 @@
-// Command sales serves the Sales System mock on :9100 (A5).
+// Command sales is the Sales upstream mock (A5).
 package main
 
 import (
 	"context"
 	"errors"
 	"flag"
-	"log/slog"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
 	app "github.com/ducnd58233/unified-document-viewer/internal/sales/app"
-	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
 
 func main() {
@@ -23,14 +22,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	logger := observability.NewLogger("info", os.Stdout)
 	if err := app.Run(ctx, app.RunOptions{
 		Addr:          *addr,
 		Down:          *down,
 		Deterministic: *deterministic,
-		Log:           logger,
 	}); err != nil && !errors.Is(err, context.Canceled) {
-		logger.Error("sales mock stopped", slog.Any("error", err))
+		fmt.Fprintf(os.Stderr, "sales mock stopped: %v\n", err)
 		os.Exit(1)
 	}
 }

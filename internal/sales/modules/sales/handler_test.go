@@ -1,7 +1,9 @@
 package sales
 
 import (
+	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,7 +13,6 @@ import (
 
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/mockfault"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/mockseed"
-	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
 
 func TestListKnownVINShape(t *testing.T) {
@@ -181,12 +182,13 @@ func TestGenerateUnknownVIN(t *testing.T) {
 }
 
 func TestListLogsVINSuffixNotFullVIN(t *testing.T) {
-	log := &observability.Capture{}
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, nil))
 	rec := httptest.NewRecorder()
 	New(Options{Log: log}).ServeHTTP(rec, httptest.NewRequest(
 		http.MethodGet, "/sales/v1/documents?vin="+mockseed.WithDocumentsA, nil,
 	))
-	joined := log.Text()
+	joined := buf.String()
 	if strings.Contains(joined, mockseed.WithDocumentsA) {
 		t.Fatalf("log leaked full VIN: %s", joined)
 	}
@@ -199,7 +201,8 @@ func TestListLogsVINSuffixNotFullVIN(t *testing.T) {
 }
 
 func TestListLogsRandomLatency(t *testing.T) {
-	log := &observability.Capture{}
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, nil))
 	rec := httptest.NewRecorder()
 	New(Options{
 		Log: log,
@@ -215,7 +218,7 @@ func TestListLogsRandomLatency(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 after latency", rec.Code)
 	}
-	joined := log.Text()
+	joined := buf.String()
 	if !strings.Contains(joined, "fault=latency") || !strings.Contains(joined, "latency=400ms") {
 		t.Fatalf("log missing latency fields: %s", joined)
 	}

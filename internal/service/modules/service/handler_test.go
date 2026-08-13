@@ -1,7 +1,9 @@
 package service
 
 import (
+	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,7 +13,6 @@ import (
 
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/mockfault"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/mockseed"
-	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
 
 func TestListKnownVINShape(t *testing.T) {
@@ -135,12 +136,13 @@ func TestHealthzAndOutage(t *testing.T) {
 }
 
 func TestListLogsVINSuffixNotFullVIN(t *testing.T) {
-	log := &observability.Capture{}
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, nil))
 	rec := httptest.NewRecorder()
 	New(Options{Log: log}).ServeHTTP(rec, httptest.NewRequest(
 		http.MethodGet, "/service/v1/vehicles/"+mockseed.WithDocumentsA+"/attachments", nil,
 	))
-	joined := log.Text()
+	joined := buf.String()
 	if strings.Contains(joined, mockseed.WithDocumentsA) {
 		t.Fatalf("log leaked full VIN: %s", joined)
 	}

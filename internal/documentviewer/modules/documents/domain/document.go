@@ -13,7 +13,7 @@ type Document struct {
 	URL      string
 }
 
-// AggregateResult is what the use case returns after fan-out, merge and sort.
+// AggregateResult is FR7: useful when one upstream is down.
 type AggregateResult struct {
 	Documents []Document
 	Partial   bool

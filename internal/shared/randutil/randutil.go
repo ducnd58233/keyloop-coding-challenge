@@ -1,4 +1,4 @@
-// Package randutil draws integers from crypto/rand for mock data generation.
+// Package randutil uses crypto/rand so mock generation does not trip gosec G404.
 package randutil
 
 import (
@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// IntN returns a random integer in [0, n). n must be positive.
+// IntN rejects n <= 0.
 func IntN(n int) (int, error) {
 	if n <= 0 {
 		return 0, fmt.Errorf("randutil.IntN: n must be positive")
@@ -22,7 +22,7 @@ func IntN(n int) (int, error) {
 
 const float64Denom = 1 << 53
 
-// Float64 returns a random value in [0, 1).
+// Float64 is unbiased in [0, 1).
 func Float64() (float64, error) {
 	n, err := IntN(float64Denom)
 	if err != nil {
@@ -31,7 +31,7 @@ func Float64() (float64, error) {
 	return float64(n) / float64(float64Denom), nil
 }
 
-// DurationBetween returns a random duration in [low, high] (millisecond steps).
+// DurationBetween errors if high < low.
 func DurationBetween(low, high time.Duration) (time.Duration, error) {
 	if high < low {
 		return 0, fmt.Errorf("randutil.DurationBetween: high < low")

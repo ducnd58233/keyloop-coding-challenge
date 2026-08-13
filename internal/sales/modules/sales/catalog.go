@@ -8,7 +8,6 @@ import (
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/mockseed"
 )
 
-// Flat snake_case records, epoch seconds, relative download_path (SYSTEM_DESIGN §5.3).
 type record struct {
 	DocID        string `json:"doc_id"`
 	Category     string `json:"category"`

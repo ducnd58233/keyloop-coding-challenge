@@ -12,6 +12,7 @@ coverage.html
 
 # Logs and scratch
 *.log
+logs/
 /tmp/
 
 # Local database files

@@ -6,16 +6,12 @@ import "time"
 // Outcome is the request result recorded on every lookup (FR8).
 type Outcome string
 
+// Outcome values are FR8 audit vocabulary, not HTTP status.
 const (
-	// OutcomeOK is a complete successful lookup.
-	OutcomeOK Outcome = "OK"
-	// OutcomePartial is at least one source down with others healthy (FR7).
-	OutcomePartial Outcome = "PARTIAL"
-	// OutcomeStale is an expired cache served after total upstream failure (FR10).
-	OutcomeStale Outcome = "STALE"
-	// OutcomeInvalidVIN is a rejected VIN (A1).
-	OutcomeInvalidVIN Outcome = "INVALID_VIN"
-	// OutcomeUnavailable is total failure with no usable cache.
+	OutcomeOK          Outcome = "OK"
+	OutcomePartial     Outcome = "PARTIAL"     // FR7
+	OutcomeStale       Outcome = "STALE"       // FR10
+	OutcomeInvalidVIN  Outcome = "INVALID_VIN" // A1
 	OutcomeUnavailable Outcome = "UNAVAILABLE"
 )
 

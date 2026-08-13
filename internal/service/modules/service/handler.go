@@ -11,7 +11,7 @@ import (
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
 
-// Options wires fault injection, file.uri base URL, and optional random attachments.
+// Options keeps Generate off when Down, or unknown VINs look healthy during outage.
 type Options struct {
 	Fault    mockfault.Config
 	BaseURL  string
@@ -20,7 +20,7 @@ type Options struct {
 	Log      observability.Logger
 }
 
-// New serves GET /healthz and GET /service/v1/vehicles/{vin}/attachments.
+// New is the Service mock HTTP surface (A5).
 func New(opt Options) http.Handler {
 	base := strings.TrimRight(opt.BaseURL, "/")
 	if base == "" {

@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,7 +11,7 @@ import (
 )
 
 func TestRecoverMapsPanicToInternalError(t *testing.T) {
-	h := Recover(observability.NewLogger("error", io.Discard))(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	h := Recover(observability.Discard())(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
 	}))
 

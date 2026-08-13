@@ -8,7 +8,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Config is the process configuration, composed of one struct per concern.
+// Config is split by concern so Load can fail fast on timeout order (DD-3).
 type Config struct {
 	HTTP     HTTP
 	Sources  Sources

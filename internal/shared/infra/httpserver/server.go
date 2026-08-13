@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -22,8 +23,7 @@ const (
 	shutdownTimeout   = 10 * time.Second
 )
 
-// Serve runs h until ctx is cancelled, then drains in-flight requests for up
-// to shutdownTimeout before returning.
+// Serve listens before logging start so a bind failure is not reported as up.
 func Serve(ctx context.Context, addr string, h http.Handler, l observability.Logger) error {
 	s := &http.Server{
 		Addr:              addr,
@@ -31,11 +31,16 @@ func Serve(ctx context.Context, addr string, h http.Handler, l observability.Log
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", addr, err)
+	}
+
 	errChan := make(chan error, 1)
 	go func() {
-		l.Info("http server started", "address", addr)
-		errChan <- s.ListenAndServe()
+		errChan <- s.Serve(ln)
 	}()
+	l.Info("http server started", "address", addr)
 
 	select {
 	case <-ctx.Done():

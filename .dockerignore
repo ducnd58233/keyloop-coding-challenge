@@ -8,6 +8,7 @@ coverage.out
 **/*_test.go
 docs
 examples
+logs
 *.md
 !go.mod
 !go.sum

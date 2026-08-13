@@ -71,7 +71,7 @@ Justifications and rejected alternatives: `SYSTEM_DESIGN.md` §7. A8 fixes the p
 | Concurrency | `golang.org/x/sync/errgroup`, `context` |
 | Persistence | PostgreSQL 17 via `jackc/pgx/v5` - **A8** |
 | Data access | `pgx` + golang-migrate pairs in `migrations/`, applied by `make migrate-up` (not on boot) |
-| Logging | stdlib `log/slog`, JSON handler |
+| Logging | stdlib `log/slog`: tinted console + JSON file per service (`logs/<service>.log`) |
 | Metrics | `prometheus/client_golang` |
 | Tracing | OpenTelemetry Go SDK, stdout exporter |
 | Testing | stdlib `testing`, table-driven, `httptest`; `mockgen` available for larger ports |
