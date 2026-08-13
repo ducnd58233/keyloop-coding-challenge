@@ -26,8 +26,7 @@ type Client struct {
 	retry bool
 }
 
-// Option configures a Client. Defaults match the aggregator: ctx deadlines,
-// one retry, short jitter.
+// Option configures a Client.
 type Option func(*Client)
 
 // WithHTTPClient replaces the default transport.
@@ -82,21 +81,24 @@ func (c *Client) DoJSON(ctx context.Context, req *http.Request, dest any) error 
 	if id := httpserver.RequestIDFrom(ctx); id != "" {
 		req.Header.Set("X-Request-Id", id)
 	}
-	err := c.doOnce(req, dest)
+	err := c.doOnce(ctx, req, dest)
 	if err == nil || !c.retry || !retryable(err) {
 		return err
 	}
 	if err := c.sleep(ctx, jitter()); err != nil {
 		return err
 	}
-	return c.doOnce(req, dest)
+	return c.doOnce(ctx, req, dest)
 }
 
-func (c *Client) doOnce(req *http.Request, dest any) error {
+func (c *Client) doOnce(ctx context.Context, req *http.Request, dest any) error {
 	res, err := c.http.Do(req)
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-			return err
+		if errors.Is(err, context.DeadlineExceeded) {
+			return context.DeadlineExceeded
+		}
+		if errors.Is(err, context.Canceled) || ctx.Err() == context.Canceled {
+			return context.Canceled
 		}
 		return errors.New("upstream fetch failed")
 	}
@@ -121,7 +123,8 @@ func retryable(err error) bool {
 	if errors.As(err, &st) {
 		return st.code >= 500
 	}
-	return true
+	// Transport errors only. Decode failures must not retry into a dirty dest.
+	return err.Error() == "upstream fetch failed"
 }
 
 func jitter() time.Duration {

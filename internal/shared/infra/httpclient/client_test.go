@@ -115,10 +115,47 @@ func TestDoJSONDoesNotRetryTimeout(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want DeadlineExceeded", err)
 	}
+	if strings.Contains(err.Error(), "localhost") || strings.Contains(err.Error(), srv.URL) || strings.Contains(err.Error(), "http") {
+		t.Fatalf("timeout error leaked host: %v", err)
+	}
 	if hits.Load() != 1 {
 		t.Fatalf("hits = %d, want 1", hits.Load())
 	}
 }
+
+func TestDoJSONRetriesTransportOnce(t *testing.T) {
+	t.Parallel()
+	var hits atomic.Int32
+	c := New(
+		WithHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if hits.Add(1) == 1 {
+				return nil, errors.New("connection reset")
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
+				Header:     make(http.Header),
+				Request:    r,
+			}, nil
+		})}),
+		WithSleep(func(context.Context, time.Duration) error { return nil }),
+	)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://upstream.example/x", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]bool
+	if err := c.DoJSON(req.Context(), req, &got); err != nil {
+		t.Fatal(err)
+	}
+	if hits.Load() != 2 || !got["ok"] {
+		t.Fatalf("hits=%d got=%v", hits.Load(), got)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestDoJSONDecodeErrorOmitsBody(t *testing.T) {
 	t.Parallel()

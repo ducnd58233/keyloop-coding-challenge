@@ -106,6 +106,9 @@ func TestSalesClientHonoursContextTimeout(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want DeadlineExceeded", err)
 	}
+	if strings.Contains(err.Error(), testVIN) || strings.Contains(err.Error(), "localhost") || strings.Contains(err.Error(), srv.URL) {
+		t.Fatalf("timeout error leaked vin or host: %v", err)
+	}
 }
 
 func TestSalesClientEmptyRecords(t *testing.T) {
