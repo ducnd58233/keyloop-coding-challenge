@@ -62,7 +62,7 @@ without updating this list.
 
 ## 3. Tech stack
 
-Justifications and rejected alternatives: `SYSTEM_DESIGN.md` §6. A8 fixes the persistence choice.
+Justifications and rejected alternatives: `SYSTEM_DESIGN.md` §7. A8 fixes the persistence choice.
 
 | Concern | Choice |
 |---|---|
@@ -70,15 +70,17 @@ Justifications and rejected alternatives: `SYSTEM_DESIGN.md` §6. A8 fixes the p
 | Routing | stdlib `net/http.ServeMux` |
 | Concurrency | `golang.org/x/sync/errgroup`, `context` |
 | Persistence | PostgreSQL 17 via `jackc/pgx/v5` - **A8** |
-| Data access | `pgx` + migrations embedded with `embed`, applied on boot |
+| Data access | `pgx` + golang-migrate pairs in `migrations/`, applied by `make migrate-up` (not on boot) |
 | Logging | stdlib `log/slog`, JSON handler |
 | Metrics | `prometheus/client_golang` |
 | Tracing | OpenTelemetry Go SDK, stdout exporter |
 | Testing | stdlib `testing`, table-driven, `httptest`; `mockgen` available for larger ports |
 | Contract | OpenAPI 3.1 generated from handler annotations by `swag`, drift-checked in CI |
+| Config / request ID | `godotenv` (load `.env`), `google/uuid` (`X-Request-Id` when absent) |
 
-**Dependency budget: four module groups.** Adding a fifth requires a decision recorded in
-`SYSTEM_DESIGN.md` §6 (see §7 Boundaries).
+**Dependency budget.** Runtime groups in use or planned: `godotenv`, `google/uuid`, `x/sync`,
+`jackc/pgx/v5`, `prometheus/client_golang`, `go.opentelemetry.io/otel`. Adding another requires a
+decision recorded in `SYSTEM_DESIGN.md` §6.9.
 
 ---
 
@@ -104,12 +106,13 @@ between machines: `golangci-lint`, `golang-migrate`, `swag`, `mockgen`.
 
 Vertical slices under `internal/modules/`, cross-cutting technical concerns under `internal/shared/`,
 configuration as a package at the repository root. Full annotated tree and the reasoning behind the
-module split: `SYSTEM_DESIGN.md` §3.3.
+module split: `SYSTEM_DESIGN.md` §3.3. This is the **target** layout; files land per `TASKS.md`
+(T2 keeps empty packages as `doc.go` stubs).
 
 ```
 api/http/docs/                     generated OpenAPI 3.1: docs.go, swagger.yaml, swagger.json
 cmd/
-  api/                             service entrypoint
+  api/                             main.go + docs.go (swag general annotations)
   mock-sales/                      Sales System mock, port 9100    (A5 - separate server)
   mock-service/                    Service System mock, port 9101  (A5 - separate server)
 configs/                           package configs - repository root, not internal
@@ -130,7 +133,7 @@ internal/
       infra/persistence/           append-only audit repository (search_audit only, R3)
   shared/
     common/                        clock, salted hashing
-    infra/httpserver/              server, request, response, context, middleware/
+    infra/httpserver/              server.go, response.go, context.go, middleware/
     infra/postgres/                pgxpool connection, Unit of Work (R4)
     observability/                 logger, metrics, tracing
 deployments/docker/docker-compose.yaml   PostgreSQL 17, healthcheck, named volume (A8)
@@ -138,8 +141,10 @@ migrations/                        golang-migrate pairs, applied by `make migrat
 bin/                               tools installed by `make tools` (gitignored)
 docs/design/                       DRAFT.md, SPEC.md, SYSTEM_DESIGN.md, TASKS.md
 examples/curl.md
-.env.example
+.env.example                       committed template
+.env                               local overrides, gitignored; copy from .env.example
 Makefile
+AGENTS.md
 README.md
 ```
 
@@ -165,19 +170,25 @@ composition root. They are **enforcement rules rather than design rationale**, s
 
 The `configs` package at the repository root is the **only** place an environment variable is read.
 One `Load()` returns a `Config` composed of per-concern structs, one file per concern; `env.go`
-holds the `env` / `duration` / `integer` helpers so parsing and defaulting are not repeated.
+holds the `env` / `duration` / `integer` / `float` / `boolean` helpers so parsing and defaulting
+are not repeated.
 
 ```go
 // configs/config.go
 type Config struct {
-    HTTP    HTTP
-    Sources Sources
-    Cache   Cache
-    Log     Log
+    HTTP     HTTP
+    Sources  Sources
+    Cache    Cache
+    Database Database
+    Log      Log
 }
 
-func Load() (Config, error)   // reads .env if present, then the environment
+func Load() (Config, error)   // godotenv.Load() then the environment
 ```
+
+`Load()` calls `godotenv.Load()`, which reads `.env` from the process working directory when the
+file is present. A missing `.env` is not an error. Copy `.env.example` to `.env` for local
+overrides; `.env` is gitignored.
 
 Being outside `internal/` is deliberate: `cmd/mock-sales` and `cmd/mock-service` load their ports
 and fault-injection settings through the same loader as `cmd/api`, so all three binaries share one
@@ -196,9 +207,11 @@ Safe defaults throughout, so `make dev` works with nothing set.
 | `CACHE_TTL` | `60s` | `cache.go` | A9 |
 | `DATABASE_URL` | `postgres://viewer:viewer@localhost:5432/viewer?sslmode=disable` | `database.go` | Matches the compose file. Password is a local development default and is never a real credential |
 | `DB_MAX_CONNS` | `10` | `database.go` | Pool ceiling; see SYSTEM_DESIGN §9.2 |
-| `VIN_HASH_SALT` | dev-only default | `log.go` | **Secret in production.** Never logged. See §8 |
+| `VIN_HASH_SALT` | `dev-only-not-a-secret` | `log.go` | **Secret in production.** Never logged. See §8 |
 | `LOG_LEVEL` | `info` | `log.go` | |
-| `MOCK_LATENCY_MS`, `MOCK_ERROR_RATE`, `MOCK_DOWN` | unset | `sources.go` | Fault injection for the mock servers (T3) |
+| `MOCK_LATENCY_MS` | `0` | `sources.go` | Fault injection for the mock servers (T3) |
+| `MOCK_ERROR_RATE` | `0` | `sources.go` | |
+| `MOCK_DOWN` | `false` | `sources.go` | |
 
 `Load()` **fails fast** if the timeout ordering is violated. An inverted budget is a silent bug: the
 outer layer fires first and the service loses the ability to report which dependency was slow

@@ -121,7 +121,7 @@ Options are scored against the constraints that actually bind, not against gener
 | **K2** The backend must make **parallel** requests to two mocked APIs | Brief, Scenario D req. 2; `DRAFT.md` FR2, FR3 | The only requirement in the entire brief that prescribes backend behaviour. It must be on the hot path, not hidden behind a cache |
 | **K3** One upstream failure must degrade, not fail | `DRAFT.md` NFR1, FR7 | The governing design constraint (§1.3) |
 | **K4** The solution must not exceed the problem | Engineering judgement | The scenario is one read endpoint over two upstreams. An option whose cost is dominated by machinery no requirement asks for is the wrong answer regardless of its merits |
-| **K5** Reviewer must be running it within two commands | `DRAFT.md` A8 | `docker compose up -d` then `make dev`. A submission a reviewer cannot run immediately gets judged on less evidence, so the database ships with the repository rather than being a prerequisite they must satisfy themselves |
+| **K5** Reviewer must be running it within one command | `DRAFT.md` A8 | `make dev` starts Postgres via compose, applies migrations, both mocks and the API. Docker is the only prerequisite. A submission a reviewer cannot run immediately gets judged on less evidence, so the database ships with the repository rather than being something they must provision themselves |
 | **K6** Must demonstrate on video in 5-10 minutes | Brief, deliverable 3 | An architecture that cannot be shown degrading on camera wastes its best moment |
 
 ---
@@ -418,22 +418,27 @@ table, transactions owned by the use case, no SQL above `infra`. Being enforceme
 design rationale they live in [`AGENTS.md`](../../AGENTS.md) beside the code, and are referenced here
 as **R1**-**R6**.
 
+Target layout after T8. T2 holds the directories with `doc.go` stubs until each task lands.
+
 ```
 .
 ├── api/
 │   └── http/
 │       └── docs/                     generated OpenAPI 3.1 - swagger.yaml, swagger.json, docs.go
 ├── cmd/
-│   ├── api/main.go                   service entrypoint
+│   ├── api/
+│   │   ├── main.go                   service entrypoint
+│   │   └── docs.go                   swag general API annotations
 │   ├── mock-sales/main.go            Sales System mock, port 9100      (A5)
 │   └── mock-service/main.go          Service System mock, port 9101    (A5)
 ├── configs/                          package configs - repository root, not internal
 │   ├── config.go                     Config struct + Load()
-│   ├── env.go                        env / duration / integer helpers
+│   ├── env.go                        env / duration / integer / float / boolean helpers
 │   ├── http.go                       server address and request budget
-│   ├── sources.go                    upstream base URLs, per-source timeout
-│   ├── cache.go                      TTL, database path
-│   └── log.go                        log level, observability toggles
+│   ├── sources.go                    upstream URLs, timeouts, mock fault flags
+│   ├── cache.go                      CACHE_TTL
+│   ├── database.go                   DATABASE_URL, DB_MAX_CONNS
+│   └── log.go                        LOG_LEVEL, VIN_HASH_SALT
 ├── internal/
 │   ├── app/                          composition root
 │   │   ├── bootstrap.go              construct adapters, wire modules
@@ -477,10 +482,10 @@ as **R1**-**R6**.
 │       │   └── hash.go               salted VIN hashing (§8.2)
 │       ├── infra/
 │       │   ├── httpserver/
-│       │   │   ├── server.go  request.go  response.go  context.go
+│       │   │   ├── server.go  response.go  context.go
 │       │   │   └── middleware/
 │       │   │       ├── chain.go  recover.go  request_id.go
-│       │   │       └── timeout.go  metrics.go
+│       │   │       └── timeout.go  metrics.go          (T7)
 │       │   └── postgres/
 │       │       ├── db.go             pgxpool connection (A8)
 │       │       └── uow.go            Unit of Work, transaction boundary (R4)
@@ -492,8 +497,10 @@ as **R1**-**R6**.
 ├── migrations/                       golang-migrate pairs, applied by `make migrate-up`
 ├── docs/design/                      DRAFT, SPEC, SYSTEM_DESIGN, TASKS
 ├── examples/curl.md
-├── .env.example
+├── .env.example                      committed template
+├── .env                              local overrides, gitignored
 ├── Makefile
+├── AGENTS.md
 └── go.mod
 ```
 
@@ -811,6 +818,8 @@ Listed separately so additions beyond the source document are visible.
 | Concrete metric and span names (§8) | NFR5 requires visibility but does not name signals |
 | Options 3-6 and the constraints K1-K6 (§2) | Method, not requirement. Options 1-2 are the author's, from DRAFT §6. K1-K6 are traced to the brief and to DRAFT requirements individually |
 | Modular layout: `modules/{documents,audit}`, `shared/`, root `configs/` (§3.3) | Code organisation, not behaviour. The `audit` split is grounded in NFR8 (append-only) being a module-level invariant, and in FR8 being invoked off the aggregation path. No requirement prescribes a directory tree |
+| Schema applied by `make migrate-up`, not `embed` on boot | A8 plus K5: the reviewer path is `make dev` (compose + migrate + mocks + API). Compiling SQL into the binary would hide the migration step from `make help` and split schema ownership away from `migrations/` |
+| `godotenv` + `google/uuid` | `Load()` reads `.env` when present; `X-Request-Id` is generated when the caller omits it. Both are small, single-purpose modules beside the four groups in §7 |
 
 ---
 
@@ -823,8 +832,8 @@ A8 fixes the persistence choice. The rest is derived.
 | Language | **Go 1.26** (verified `go1.26.5`) | FR3, NFR1, NFR2 and NFR3 are all about bounded parallel fan-out with per-source deadlines and failure isolation. Goroutines, `context` and `errgroup` make that a first-class concern rather than plumbing. Single static binary | Node or Python: achievable, but the concurrency and cancellation semantics the scenario is *about* would be less direct to express |
 | HTTP routing | **stdlib `net/http.ServeMux`** | Since Go 1.22 the stdlib mux supports method and wildcard patterns, which is the entire routing need. Zero dependencies; handlers are plain `http.Handler`, trivially testable with `httptest` | `chi`: good, but with one route the middleware helper is ~20 lines to hand-roll. `gin`/`echo`: heavier, bespoke context type complicates handler tests |
 | Concurrency | **`golang.org/x/sync/errgroup`** | Reviewed implementation of bounded fan-out with cancellation. Used carefully per DD-2 | Hand-rolled `WaitGroup` + channels: more code, more ways to leak a goroutine |
-| Persistence | **PostgreSQL 17 via `pgx/v5`** | **A8 specifies this.** Real transactions, so the transaction rule R4 is demonstrable rather than theoretical; a real connection pool to reason about under load; `jsonb` for the cached payload. Shipped in `deployments/docker/docker-compose.yaml` so it is two commands, not a prerequisite (K5) | **SQLite**: zero setup, but no pooling, and an embedded database sidesteps the operational questions the brief's "scalability, reliability" line is asking about. **MongoDB**: a natural fit for the cached document payload and TTL indexes, but multi-document transactions need a replica set, which complicates compose for the one capability R4 depends on |
-| Data access | **`pgx/v5` + migrations embedded with `embed`** | Two tables. Explicit SQL is shorter and more reviewable than any abstraction over it, and `pgx` exposes the pool statistics the scalability section relies on. Migrations compiled into the binary keep it self-contained | GORM: obscures emitted queries, large dependency, solves a problem this schema does not have. `database/sql`: portable, but gives up pgx's pool introspection and native `jsonb` handling |
+| Persistence | **PostgreSQL 17 via `pgx/v5`** | **A8 specifies this.** Real transactions, so the transaction rule R4 is demonstrable rather than theoretical; a real connection pool to reason about under load; `jsonb` for the cached payload. Shipped in `deployments/docker/docker-compose.yaml` so `make dev` is one command, not a provisioning exercise (K5) | **SQLite**: zero setup, but no pooling, and an embedded database sidesteps the operational questions the brief's "scalability, reliability" line is asking about. **MongoDB**: a natural fit for the cached document payload and TTL indexes, but multi-document transactions need a replica set, which complicates compose for the one capability R4 depends on |
+| Data access | **`pgx/v5` + golang-migrate via `make migrate-up`** | Two tables. Explicit SQL is shorter and more reviewable than any abstraction over it, and `pgx` exposes the pool statistics the scalability section relies on. Schema lives in `migrations/` and is applied by the Makefile, not on process boot, so `make help` is the single place a reviewer looks | GORM: obscures emitted queries, large dependency, solves a problem this schema does not have. `database/sql`: portable, but gives up pgx's pool introspection and native `jsonb` handling. `embed` on boot: hides the migration step from `make help` and splits schema ownership |
 | Logging | **stdlib `log/slog`** | Structured JSON in the stdlib since 1.21. Context-aware handlers attach request and trace IDs automatically. Serves NFR5 with zero dependencies | `zerolog`/`zap`: faster, but this service is I/O-bound on upstream calls; the difference is irrelevant here |
 | Metrics | **`prometheus/client_golang`** | De-facto standard, one line to mount `/metrics`, instantly scrapeable in a demo. Serves NFR5 | OTel metrics SDK: better long-term unification, more moving parts for the same demo |
 | Tracing | **OpenTelemetry Go SDK** | Vendor-neutral. W3C propagation means a trace spans the aggregation, and the parallel fan-out becomes *visible* as sibling spans - the clearest evidence FR3 and NFR3 are met | A vendor SDK: lock-in for no gain |
@@ -832,8 +841,8 @@ A8 fixes the persistence choice. The rest is derived.
 | Client stub | **OpenAPI 3.1 generated by `swag`, plus curl examples and a Go harness** | Satisfies the brief's "stub the client-side layer with a test harness, cURL examples, or an API contract". Generating from handler annotations means `make openapi-check` fails in CI the moment the contract drifts from the code, which a hand-written file cannot do | Hand-written YAML: one less tool, but it goes stale silently and nothing catches it |
 | Mock upstreams | **Two separate binaries** (A5) | Real HTTP across two sockets genuinely exercises NFR2 and NFR3. Separate processes let the demo kill one outright to show FR7 | One binary with two routes: fewer processes, but weaker evidence and a clumsier outage demo |
 
-**External dependency footprint: four module groups** - `x/sync`, `jackc/pgx/v5`,
-`prometheus/client_golang`, `go.opentelemetry.io/otel`.
+**External dependency footprint.** In use now: `godotenv`, `google/uuid`. Planned with T4/T5/T7:
+`x/sync`, `jackc/pgx/v5`, `prometheus/client_golang`, `go.opentelemetry.io/otel`.
 
 ---
 
@@ -851,7 +860,7 @@ That is why the instrumentation level is chosen deliberately rather than default
 | **A** Structured logs only | `log/slog` JSON to stdout | Zero dependencies. Enough to debug one incident after the fact | Cannot answer "how often do users see a partial view?" without a log pipeline. No latency distribution. Nothing to alert on | **Insufficient** - cannot verify NFR5 |
 | **B** + Prometheus metrics | `/metrics`, RED plus per-source SLIs | One collector registry and a handler mount. Directly answers the partial-rate question. Alertable. `curl /metrics` demos in seconds (K6) | No causal view of a single slow request. Cannot *prove* the fan-out is parallel, only that total duration is below the sum - suggestive, not conclusive | The minimum that satisfies NFR5 |
 | **C** + OTel tracing, stdout exporter | Spans with W3C propagation | Span plumbing through the fan-out, no external process. Produces the strongest artefact in the submission: the two upstream spans render as **overlapping siblings**, direct visual proof that "the backend must make parallel requests" is met rather than asserted. Also gives a `trace_id` joining logs, traces and the audit table | Stdout span output is verbose and photographs badly on video | ✅ **Selected** |
-| **D** + OTLP collector, Jaeger, Prometheus | docker-compose pipeline | A real trace UI. Production-shaped | **Docker becomes a prerequisite, breaking K5.** "Clone and `make dev`" is the highest-leverage thing a submission offers a reviewer, and three extra services buy nothing the parallelism evidence in Level C does not already provide | **Rejected for this build**, documented as the production path (§9.6) |
+| **D** + OTLP collector, Jaeger, Prometheus | docker-compose pipeline | A real trace UI. Production-shaped | Three extra compose services on top of the Postgres container A8 already requires. `make dev` stays one command only if the demo stack stays at Postgres plus the three binaries; Level C already proves parallelism | **Rejected for this build**, documented as the production path (§9.6) |
 
 > **✅ Selected: Level C.** The parallelism evidence is worth the verbosity cost, and tracing is the
 > only signal that can *demonstrate* FR3 rather than describe it. Level D is deliberately deferred,
@@ -1294,7 +1303,7 @@ Reproduced from `DRAFT.md` §2 with the reasoning behind each.
 | **A5** | **Two separate** mock API servers, each with a different response structure | Two processes across two sockets genuinely exercise NFR2, NFR3 and cancellation, and let the demo kill one outright to show FR7. Dissimilar shapes are what make FR5 real work rather than a rename |
 | **A6** | Unknown VIN returns `200` with an empty list, not `404` | The service has no authoritative vehicle registry - out of scope - and must not assert knowledge it does not have. See DD-6 |
 | **A7** | One upstream failing still returns the healthy source plus per-source status | The governing constraint. See §1.3 and DD-1 |
-| **A8** | Persistence is PostgreSQL, provisioned by `deployments/docker/docker-compose.yaml` | Real transactions make the transaction rule R4 demonstrable rather than theoretical, and a real pool gives the scalability discussion something concrete. Shipping the database with the repository keeps setup to two commands, so the reviewer is never blocked on provisioning. Rejected: SQLite (no pooling, sidesteps the operational questions the brief asks about) and MongoDB (multi-document transactions need a replica set) |
+| **A8** | Persistence is PostgreSQL, provisioned by `deployments/docker/docker-compose.yaml` | Real transactions make the transaction rule R4 demonstrable rather than theoretical, and a real pool gives the scalability discussion something concrete. Shipping the database with the repository keeps setup to `make dev`, so the reviewer is never blocked on provisioning. Rejected: SQLite (no pooling, sidesteps the operational questions the brief asks about) and MongoDB (multi-document transactions need a replica set) |
 | **A9** | Upstreams are read-only and change slowly; 60s cache TTL is acceptable staleness | Document sets change on the order of days. 60 seconds trades imperceptible staleness for meaningful upstream protection. TTL is configurable |
 | **A10** | Document access is auditable; every lookup is recorded including failed and rejected ones | An audit trail with gaps at exactly the interesting moments is worthless. See DD-5 |
 | **A11** | Cache stores document metadata only, never bytes | Follows A4. Also bounds cache size predictably |

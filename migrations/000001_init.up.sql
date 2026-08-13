@@ -1,0 +1,2 @@
+-- Placeholder: unblocks `make migrate-up` for the walking skeleton (T2).
+-- document_cache and search_audit land in the T5 migration.

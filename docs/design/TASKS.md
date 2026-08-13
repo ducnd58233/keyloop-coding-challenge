@@ -1,17 +1,19 @@
 # Execution plan - Unified Document Viewer
 
-> **Provenance.** Derived from [`DRAFT.md`](DRAFT.md) (requirements), [`SPEC.md`](SPEC.md) (commands,
-> structure, boundaries) and [`SYSTEM_DESIGN.md`](SYSTEM_DESIGN.md) (design decisions). Requirement
+> **Provenance.** Derived from `[DRAFT.md](DRAFT.md)` (requirements), `[SPEC.md](SPEC.md)` (commands,
+> structure, boundaries) and `[SYSTEM_DESIGN.md](SYSTEM_DESIGN.md)` (design decisions). Requirement
 > identifiers below refer to `DRAFT.md`.
 
 Every task names the requirements it satisfies and the gate that proves it. A task without a gate is
 not done, it is merely written.
 
-Architecture: **Option 1**, chosen in [`DRAFT.md`](DRAFT.md) §6.3 and confirmed against five
-alternatives in [`SYSTEM_DESIGN.md`](SYSTEM_DESIGN.md) §2.9. Sizes are relative, not estimates: **L** carries the
+Architecture: **Option 1**, chosen in `[DRAFT.md](DRAFT.md)` §6.3 and confirmed against five
+alternatives in `[SYSTEM_DESIGN.md](SYSTEM_DESIGN.md)` §2.9. Sizes are relative, not estimates: **L** carries the
 graded logic, **M** is ordinary build work, **S** is scaffolding or wiring.
 
 ---
+
+
 
 ## Ordering
 
@@ -30,25 +32,33 @@ flowchart LR
     T8 --> T9
 ```
 
+
+
 T3 precedes T4 so the aggregator is developed against real upstreams from the outset, not against
 fakes alone. T5 and T6 both depend on T4 because the cache policy and the HTTP status
 selection are both driven by the aggregate result type.
 
 ---
 
+
+
 ## Tasks
 
-| # | Task | Satisfies | Gate | Size |
-|---|---|---|---|---|
-| **T1** | **Design docs** - DRAFT, SPEC, system design, this plan | Part 1, all six elements | ✅ Six-element coverage map; architecture from DRAFT §6 confirmed against five alternatives (§2.9); 13 diagrams parse-checked; every section traced to a DRAFT identifier; additions isolated in SYSTEM_DESIGN §6.9 | L |
-| **T2** | Scaffold + walking skeleton | A8, K5, R1-R6 | Module tree per SPEC §5 with both slices stubbed; `make help` and `make tools` both work; `deployments/docker/docker-compose.yaml` brings up PostgreSQL 17 with a healthcheck, and `make db-up && make dev` works from a clean clone; **`configs` package at the repository root is the only reader of environment variables**, and `Load()` **fails fast if the timeout ordering in SPEC §6 is violated**; `internal/app/bootstrap.go` is the sole place that constructs concrete types; `go run ./cmd/api` serves `/healthz` and `/readyz`; every target listed by `make help` runs; graceful shutdown | S |
-| **T3** | **Two** mock servers | FR2, A5 | `cmd/mock-sales` on 9100 and `cmd/mock-service` on 9101, **separate processes**; payload shapes match SYSTEM_DESIGN §5.3 and differ in naming, date format, nesting and type vocabulary; flags for latency, error rate and full outage; seed data for ≥3 VINs including one with **zero** documents (FR6) | M |
-| **T4** | **`documents` domain + use case (TDD)** | FR3, FR4, FR5, NFR1, NFR2, NFR3 | **Four gates below.** All of it inside `modules/documents/{domain,app}` with zero I/O, driven through the ports in `app/ports.go` | L |
-| **T5** | Persistence: cache + audit slices | FR8, FR9, FR10, NFR6, NFR7, NFR8, A9, A11, R3, R4 | `migrations/` holds golang-migrate pairs applied by `make migrate-up`; `shared/infra/postgres` exposes the pool and the Unit of Work; **one repository per table (R3)** and **no `Begin`/`Commit` inside any repository (R4)**; `documents/infra/persistence` does TTL 60s reads/writes and the stale-while-error fallback, **partial never written** (NFR6), **read error falls through to upstreams** (NFR7); `audit/` writes a row on every request including invalid VIN and total failure (FR8) and **exposes no update or delete path** (NFR8); fake-clock tests via `shared/common/clock.go` | M |
-| **T6** | HTTP layer | FR1, FR6, FR7, NFR4 | Status selection matches SYSTEM_DESIGN §5.4 exactly: `400 VIN_INVALID`, `200`+`[]` for unknown VIN, `503 ALL_SOURCES_UNAVAILABLE` only when all sources fail and no cache exists; DTO matches §5.2 in **snake_case** with exactly the six A4 fields; `httptest` coverage | M |
-| **T7** | Observability | NFR5 | slog JSON carrying `request_id` and `trace_id`; all nine metrics from SYSTEM_DESIGN §8.3 on `/metrics`; OTel spans where the two upstream spans **overlap**; **log-capture test asserting the full VIN never appears** (SPEC §8). Instrumentation Level C per §8.1 | M |
-| **T8** | Contract + README | Deliverable 2 | `make openapi` regenerates `api/http/docs/` from handler annotations and `make openapi-check` passes; `examples/curl.md` runs against a live service; README covers build/run/test **and the AI Collaboration Narrative** | M |
-| **T9** | Demo rehearsal | Deliverable 3 | Timed inside 5-10 minutes: happy path → kill the Service mock live → `partial: true` → `/metrics` → test suite | S |
+
+| #      | Task                                                    | Satisfies                                         | Gate                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Size |
+| ------ | ------------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| **T1** | **Design docs** - DRAFT, SPEC, system design, this plan | Part 1, all six elements                          | ✅ Six-element coverage map; architecture from DRAFT §6 confirmed against five alternatives (§2.9); 13 diagrams parse-checked; every section traced to a DRAFT identifier; additions isolated in SYSTEM_DESIGN §6.9                                                                                                                                                                                                                                                                                                                                                                                                                           | L    |
+| **T2** | Scaffold + walking skeleton                             | A8, K5, R1-R6                                     | Module tree per SPEC §5 with both slices stubbed; `make help` and `make tools` both work; `deployments/docker/docker-compose.yaml` brings up PostgreSQL 17 with a healthcheck, and `make dev` (which runs `db-up` + `migrate-up` + mocks + API) works from a clean clone; `configs` **package at the repository root is the only reader of environment variables**, and `Load()` **fails fast if the timeout ordering in SPEC §6 is violated**; `internal/app/bootstrap.go` is the sole place that constructs concrete types; `go run ./cmd/api` serves `/healthz` and `/readyz`; every target listed by `make help` runs; graceful shutdown | S    |
+| **T3** | **Two** mock servers                                    | FR2, A5                                           | `cmd/mock-sales` on 9100 and `cmd/mock-service` on 9101, **separate processes**; payload shapes match SYSTEM_DESIGN §5.3 and differ in naming, date format, nesting and type vocabulary; flags for latency, error rate and full outage; seed data for ≥3 VINs including one with **zero** documents (FR6)                                                                                                                                                                                                                                                                                                                                    | M    |
+| **T4** | `documents` **domain + use case (TDD)**                 | FR3, FR4, FR5, NFR1, NFR2, NFR3                   | **Four gates below.** All of it inside `modules/documents/{domain,app}` with zero I/O, driven through the ports in `app/ports.go`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | L    |
+| **T5** | Persistence: cache + audit slices                       | FR8, FR9, FR10, NFR6, NFR7, NFR8, A9, A11, R3, R4 | `migrations/` holds golang-migrate pairs applied by `make migrate-up`; `shared/infra/postgres` exposes the pool and the Unit of Work; **one repository per table (R3)** and **no** `Begin`**/**`Commit` **inside any repository (R4)**; `documents/infra/persistence` does TTL 60s reads/writes and the stale-while-error fallback, **partial never written** (NFR6), **read error falls through to upstreams** (NFR7); `audit/` writes a row on every request including invalid VIN and total failure (FR8) and **exposes no update or delete path** (NFR8); fake-clock tests via `shared/common/clock.go`                                  | M    |
+| **T6** | HTTP layer                                              | FR1, FR6, FR7, NFR4                               | Status selection matches SYSTEM_DESIGN §5.4 exactly: `400 VIN_INVALID`, `200`+`[]` for unknown VIN, `503 ALL_SOURCES_UNAVAILABLE` only when all sources fail and no cache exists; DTO matches §5.2 in **snake_case** with exactly the six A4 fields; `httptest` coverage                                                                                                                                                                                                                                                                                                                                                                     | M    |
+| **T7** | Observability                                           | NFR5                                              | slog JSON carrying `request_id` and `trace_id`; all nine metrics from SYSTEM_DESIGN §8.3 on `/metrics`; OTel spans where the two upstream spans **overlap**; **log-capture test asserting the full VIN never appears** (SPEC §8). Instrumentation Level C per §8.1                                                                                                                                                                                                                                                                                                                                                                           | M    |
+| **T8** | Contract + README                                       | Deliverable 2                                     | `make openapi` regenerates `api/http/docs/` from handler annotations and `make openapi-check` passes; `examples/curl.md` runs against a live service; README covers build/run/test **and the AI Collaboration Narrative**                                                                                                                                                                                                                                                                                                                                                                                                                    | M    |
+| **T9** | Demo rehearsal                                          | Deliverable 3                                     | Timed inside 5-10 minutes: happy path → kill the Service mock live → `partial: true` → `/metrics` → test suite                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | S    |
+
+
+
 
 ### T4 gates - the task the submission is judged on
 
@@ -62,6 +72,8 @@ validated by tests, and two of its failure modes are invisible to a happy-path s
 
 ---
 
+
+
 ## Cut list
 
 If scope has to shrink, it shrinks in this order. Each is a deliberate deferral recorded in
@@ -70,8 +82,10 @@ SYSTEM_DESIGN §9.5, not a silent drop.
 1. `singleflight` request collapsing - protects against a stampede a demo will never produce
 2. OTLP exporter wiring - the stdout exporter already shows the span structure
 3. Retry on transport error - the timeout budget already bounds the failure
-4. Dockerfile - `make dev` is the supported path, and A8 exists precisely to avoid Docker
+4. Application Dockerfile - `make dev` is the supported path; A8 already ships Postgres as the only container
 5. Fault-injection flags beyond a hard outage - the outage is what the demo needs
+
+
 
 ## Never cut
 
@@ -83,28 +97,34 @@ SYSTEM_DESIGN §9.5, not a silent drop.
 
 ---
 
+
+
 ## Requirement coverage
 
 Every `DRAFT.md` requirement lands in a task. Nothing is orphaned.
 
-| Task | Requirements |
-|---|---|
-| T2 | A8 (plus the structural constraints in SPEC §5 and rules R1-R6 in AGENTS.md) |
-| T3 | FR2, A5 |
-| T4 | FR3, FR4, FR5, NFR1, NFR2, NFR3, A1 |
-| T5 | FR8, FR9, FR10, NFR6, NFR7, NFR8, A9, A10, A11 |
-| T6 | FR1, FR6, FR7, NFR4, A6 |
-| T7 | NFR5 |
+
+| Task | Requirements                                                                 |
+| ---- | ---------------------------------------------------------------------------- |
+| T2   | A8 (plus the structural constraints in SPEC §5 and rules R1-R6 in AGENTS.md) |
+| T3   | FR2, A5                                                                      |
+| T4   | FR3, FR4, FR5, NFR1, NFR2, NFR3, A1                                          |
+| T5   | FR8, FR9, FR10, NFR6, NFR7, NFR8, A9, A10, A11                               |
+| T6   | FR1, FR6, FR7, NFR4, A6                                                      |
+| T7   | NFR5                                                                         |
+
 
 A2 (auth upstream) and A3 (single-tenant) are scoping assumptions with no implementation task; both
 are recorded as extension points in SYSTEM_DESIGN §9.2 and §12.
 
 ---
 
+
+
 ## Status
 
 - [x] **T1** - Design docs
-- [ ] T2 - Scaffold and walking skeleton
+- [x] **T2** - Scaffold and walking skeleton
 - [ ] T3 - Two mock servers
 - [ ] T4 - Domain and aggregation core ← **critical path**
 - [ ] T5 - Persistence: cache + audit slices

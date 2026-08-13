@@ -1,0 +1,1 @@
+-- Placeholder: pairs with 000001_init.up.sql.
