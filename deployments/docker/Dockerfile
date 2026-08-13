@@ -23,13 +23,17 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 FROM alpine:3.21
 
+# Logger writes JSON to logs/<service>.log (cwd /). nonroot cannot mkdir /.
 RUN apk add --no-cache ca-certificates tzdata wget \
-    && adduser -D -H -u 65532 nonroot
+    && adduser -D -H -u 65532 nonroot \
+    && mkdir -p /logs \
+    && chown nonroot:nonroot /logs \
+    && chmod 0750 /logs
 
 COPY --from=build /out/app /app
 
 USER nonroot:nonroot
 
-EXPOSE 8080 9100 9101
+EXPOSE 8000 9100 9101
 
 ENTRYPOINT ["/app"]

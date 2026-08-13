@@ -217,7 +217,7 @@ func TestCacheStoreUnitOfWorkCommit(t *testing.T) {
 }
 
 func TestCacheLookupErrorOnClosedPool(t *testing.T) {
-	pool := testutil.OpenPool(t)
+	pool := testutil.OpenPrivatePool(t)
 	repo := NewCacheRepository(pool, common.SystemClock{})
 	pool.Close()
 	_, _, err := repo.Lookup(context.Background(), testutil.VINFor(t))

@@ -105,3 +105,18 @@ func TestLoadInvalidEnv(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadDefaultHTTPAddr(t *testing.T) {
+	t.Setenv("HTTP_ADDR", "")
+	t.Setenv("PER_SOURCE_TIMEOUT", "2s")
+	t.Setenv("AGGREGATE_TIMEOUT", "2500ms")
+	t.Setenv("REQUEST_TIMEOUT", "3s")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.HTTP.Address != ":8000" {
+		t.Fatalf("HTTP.Address = %q, want :8000", cfg.HTTP.Address)
+	}
+}

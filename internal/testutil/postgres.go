@@ -36,6 +36,7 @@ const (
 var (
 	startOnce sync.Once
 	shared    *postgres.Pool
+	sharedDSN string
 	errStart  error
 )
 
@@ -51,6 +52,21 @@ func OpenPool(t *testing.T) *postgres.Pool {
 		t.Fatalf("isolated postgres: %v", errStart)
 	}
 	return shared
+}
+
+// OpenPrivatePool is a second pool on the same isolated container. Close it in
+// the test; do not Close the shared OpenPool (shuffle would poison siblings).
+func OpenPrivatePool(t *testing.T) *postgres.Pool {
+	t.Helper()
+	_ = OpenPool(t)
+	ctx, cancel := context.WithTimeout(context.Background(), initTimeout)
+	defer cancel()
+	p, err := postgres.Open(ctx, sharedDSN, testPoolMaxConns)
+	if err != nil {
+		t.Fatalf("isolated postgres: private pool: %v", err)
+	}
+	t.Cleanup(p.Close)
+	return p
 }
 
 func startIsolated(ctx context.Context) error {
@@ -90,6 +106,7 @@ func startIsolated(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("testutil: open pool: %w", err)
 	}
+	sharedDSN = connStr
 	shared = p
 	return nil
 }

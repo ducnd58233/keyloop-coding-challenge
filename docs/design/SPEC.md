@@ -220,7 +220,7 @@ Safe defaults throughout, so `make dev` works with nothing set.
 
 | Variable | Default | File | Notes |
 |---|---|---|---|
-| `HTTP_ADDR` | `:8080` | `http.go` | |
+| `HTTP_ADDR` | `:8000` | `http.go` | |
 | `REQUEST_TIMEOUT` | `3s` | `http.go` | Derived; must exceed `AGGREGATE_TIMEOUT` |
 | `SALES_BASE_URL` | `http://localhost:9100` | `sources.go` | Also resolves relative `download_path` values |
 | `SERVICE_BASE_URL` | `http://localhost:9101` | `sources.go` | |
