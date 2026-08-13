@@ -71,32 +71,32 @@ func (mr *MockDocumentSourceMockRecorder) Name() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockDocumentSource)(nil).Name))
 }
 
-// MockCacheStore is a mock of CacheStore interface.
-type MockCacheStore struct {
+// MockDocumentCache is a mock of DocumentCache interface.
+type MockDocumentCache struct {
 	ctrl     *gomock.Controller
-	recorder *MockCacheStoreMockRecorder
+	recorder *MockDocumentCacheMockRecorder
 	isgomock struct{}
 }
 
-// MockCacheStoreMockRecorder is the mock recorder for MockCacheStore.
-type MockCacheStoreMockRecorder struct {
-	mock *MockCacheStore
+// MockDocumentCacheMockRecorder is the mock recorder for MockDocumentCache.
+type MockDocumentCacheMockRecorder struct {
+	mock *MockDocumentCache
 }
 
-// NewMockCacheStore creates a new mock instance.
-func NewMockCacheStore(ctrl *gomock.Controller) *MockCacheStore {
-	mock := &MockCacheStore{ctrl: ctrl}
-	mock.recorder = &MockCacheStoreMockRecorder{mock}
+// NewMockDocumentCache creates a new mock instance.
+func NewMockDocumentCache(ctrl *gomock.Controller) *MockDocumentCache {
+	mock := &MockDocumentCache{ctrl: ctrl}
+	mock.recorder = &MockDocumentCacheMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockCacheStore) EXPECT() *MockCacheStoreMockRecorder {
+func (m *MockDocumentCache) EXPECT() *MockDocumentCacheMockRecorder {
 	return m.recorder
 }
 
 // Lookup mocks base method.
-func (m *MockCacheStore) Lookup(ctx context.Context, vin string) (domain.CachedResult, bool, error) {
+func (m *MockDocumentCache) Lookup(ctx context.Context, vin string) (domain.CachedResult, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Lookup", ctx, vin)
 	ret0, _ := ret[0].(domain.CachedResult)
@@ -106,13 +106,13 @@ func (m *MockCacheStore) Lookup(ctx context.Context, vin string) (domain.CachedR
 }
 
 // Lookup indicates an expected call of Lookup.
-func (mr *MockCacheStoreMockRecorder) Lookup(ctx, vin any) *gomock.Call {
+func (mr *MockDocumentCacheMockRecorder) Lookup(ctx, vin any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lookup", reflect.TypeOf((*MockCacheStore)(nil).Lookup), ctx, vin)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lookup", reflect.TypeOf((*MockDocumentCache)(nil).Lookup), ctx, vin)
 }
 
 // Store mocks base method.
-func (m *MockCacheStore) Store(ctx context.Context, vin string, r domain.AggregateResult, ttl time.Duration) error {
+func (m *MockDocumentCache) Store(ctx context.Context, vin string, r domain.AggregateResult, ttl time.Duration) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Store", ctx, vin, r, ttl)
 	ret0, _ := ret[0].(error)
@@ -120,7 +120,7 @@ func (m *MockCacheStore) Store(ctx context.Context, vin string, r domain.Aggrega
 }
 
 // Store indicates an expected call of Store.
-func (mr *MockCacheStoreMockRecorder) Store(ctx, vin, r, ttl any) *gomock.Call {
+func (mr *MockDocumentCacheMockRecorder) Store(ctx, vin, r, ttl any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Store", reflect.TypeOf((*MockCacheStore)(nil).Store), ctx, vin, r, ttl)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Store", reflect.TypeOf((*MockDocumentCache)(nil).Store), ctx, vin, r, ttl)
 }
