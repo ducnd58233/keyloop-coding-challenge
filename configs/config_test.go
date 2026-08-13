@@ -3,7 +3,6 @@ package configs
 import (
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestLoadTimeoutOrdering(t *testing.T) {
@@ -54,6 +53,30 @@ func TestLoadTimeoutOrdering(t *testing.T) {
 	}
 }
 
+func TestFloatEnv(t *testing.T) {
+	t.Setenv("RATE", "0.25")
+	got, err := float("RATE", 0)
+	if err != nil || got != 0.25 {
+		t.Fatalf("float(RATE) = %v, %v, want 0.25", got, err)
+	}
+	got, err = float("RATE_MISSING", 0.5)
+	if err != nil || got != 0.5 {
+		t.Fatalf("float missing fallback = %v, %v, want 0.5", got, err)
+	}
+}
+
+func TestBooleanEnv(t *testing.T) {
+	t.Setenv("FLAG_ON", "true")
+	got, err := boolean("FLAG_ON", false)
+	if err != nil || !got {
+		t.Fatalf("boolean(FLAG_ON) = %v, %v, want true", got, err)
+	}
+	got, err = boolean("FLAG_MISSING", true)
+	if err != nil || !got {
+		t.Fatalf("boolean missing fallback = %v, %v, want true", got, err)
+	}
+}
+
 func TestLoadInvalidEnv(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -63,8 +86,6 @@ func TestLoadInvalidEnv(t *testing.T) {
 		{name: "bad request timeout", key: "REQUEST_TIMEOUT", value: "abc"},
 		{name: "bare number duration", key: "PER_SOURCE_TIMEOUT", value: "2"},
 		{name: "bad db max conns", key: "DB_MAX_CONNS", value: "nope"},
-		{name: "bad mock error rate", key: "MOCK_ERROR_RATE", value: "bad"},
-		{name: "bad mock down", key: "MOCK_DOWN", value: "yes"},
 	}
 
 	for _, tt := range tests {
@@ -82,28 +103,5 @@ func TestLoadInvalidEnv(t *testing.T) {
 				t.Fatalf("Load() error = %q, want substring %q", err.Error(), tt.key)
 			}
 		})
-	}
-}
-
-func TestLoadTypedMockFlags(t *testing.T) {
-	t.Setenv("PER_SOURCE_TIMEOUT", "2s")
-	t.Setenv("AGGREGATE_TIMEOUT", "2500ms")
-	t.Setenv("REQUEST_TIMEOUT", "3s")
-	t.Setenv("MOCK_LATENCY_MS", "150")
-	t.Setenv("MOCK_ERROR_RATE", "0.25")
-	t.Setenv("MOCK_DOWN", "true")
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() unexpected error: %v", err)
-	}
-	if cfg.Sources.MockLatency != 150*time.Millisecond {
-		t.Fatalf("MockLatency = %s, want 150ms", cfg.Sources.MockLatency)
-	}
-	if cfg.Sources.MockErrorRate != 0.25 {
-		t.Fatalf("MockErrorRate = %v, want 0.25", cfg.Sources.MockErrorRate)
-	}
-	if !cfg.Sources.MockDown {
-		t.Fatal("MockDown = false, want true")
 	}
 }

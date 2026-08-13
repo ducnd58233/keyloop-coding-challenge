@@ -2,17 +2,13 @@ package configs
 
 import "time"
 
-// Sources configures the two upstream document systems (A5) and, since all
-// three binaries share this loader, the fault injection flags read by the
-// mock servers themselves (T3).
+// Sources configures the two upstream document systems (A5). Mock fault
+// injection is process flags on cmd/sales and cmd/service, not environment variables.
 type Sources struct {
 	SalesBaseURL     string
 	ServiceBaseURL   string
 	PerSourceTimeout time.Duration
 	AggregateTimeout time.Duration
-	MockLatency      time.Duration
-	MockErrorRate    float64
-	MockDown         bool
 }
 
 func loadSources() (Sources, error) {
@@ -24,26 +20,11 @@ func loadSources() (Sources, error) {
 	if err != nil {
 		return Sources{}, err
 	}
-	latencyMs, err := integer("MOCK_LATENCY_MS", 0)
-	if err != nil {
-		return Sources{}, err
-	}
-	errorRate, err := float("MOCK_ERROR_RATE", 0)
-	if err != nil {
-		return Sources{}, err
-	}
-	down, err := boolean("MOCK_DOWN", false)
-	if err != nil {
-		return Sources{}, err
-	}
 
 	return Sources{
 		SalesBaseURL:     env("SALES_BASE_URL", "http://localhost:9100"),
 		ServiceBaseURL:   env("SERVICE_BASE_URL", "http://localhost:9101"),
 		PerSourceTimeout: perSource,
 		AggregateTimeout: aggregate,
-		MockLatency:      time.Duration(latencyMs) * time.Millisecond,
-		MockErrorRate:    errorRate,
-		MockDown:         down,
 	}, nil
 }

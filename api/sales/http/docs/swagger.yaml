@@ -1,0 +1,82 @@
+components:
+  schemas:
+    sales.listResponse:
+      properties:
+        records:
+          items:
+            $ref: '#/components/schemas/sales.record'
+          type: array
+          uniqueItems: false
+        vin:
+          type: string
+      type: object
+    sales.record:
+      properties:
+        category:
+          type: string
+        created_epoch:
+          type: integer
+        doc_id:
+          type: string
+        download_path:
+          type: string
+        name:
+          type: string
+      type: object
+externalDocs:
+  description: ""
+  url: ""
+info:
+  description: Deliberately dissimilar Sales upstream (A5). Flat snake_case, epoch
+    seconds.
+  title: Sales System mock
+  version: 0.1.0
+openapi: 3.1.0
+paths:
+  /healthz:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: string
+          description: OK
+        "503":
+          content:
+            application/json:
+              schema:
+                type: string
+          description: Service Unavailable
+      summary: Liveness probe
+  /sales/v1/documents:
+    get:
+      parameters:
+      - description: Vehicle identification number
+        in: query
+        name: vin
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/sales.listResponse'
+          description: OK
+        "500":
+          content:
+            application/json:
+              schema:
+                type: string
+          description: Internal Server Error
+        "503":
+          content:
+            application/json:
+              schema:
+                type: string
+          description: Service Unavailable
+      summary: List sales documents for a VIN
+servers:
+- url: /

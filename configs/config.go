@@ -1,5 +1,5 @@
 // Package configs is the only place an environment variable is read (AGENTS.md).
-// cmd/api calls Load today; the mock binaries share the same defaults from T3.
+// cmd/documentviewer calls Load. Mock binaries take fault flags on the command line.
 package configs
 
 import (
