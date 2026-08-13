@@ -315,6 +315,51 @@ func TestPartialCacheHitIsIgnored(t *testing.T) {
 	}
 }
 
+func TestCacheStoreErrorDoesNotFailRequest(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	cache := appmocks.NewMockDocumentCache(ctrl)
+	cache.EXPECT().Lookup(gomock.Any(), testVIN).Return(domain.CachedResult{}, false, nil)
+	cache.EXPECT().Store(gomock.Any(), testVIN, gomock.Any(), gomock.Any()).Return(errors.New("db down"))
+	a := New(Options{
+		Sources: []app.DocumentSource{
+			stubSource(ctrl, domain.SourceSales, []domain.Document{salesDoc("1")}, nil),
+			stubSource(ctrl, domain.SourceService, []domain.Document{serviceDoc("2")}, nil),
+		},
+		DocumentCache: cache,
+		CacheTTL:      time.Minute,
+	})
+	got, err := a.Documents(context.Background(), testVIN)
+	if err != nil {
+		t.Fatalf("err = %v, want live result when cache write fails", err)
+	}
+	if got.Partial || len(got.Documents) != 2 {
+		t.Fatalf("got %+v, want full live result", got)
+	}
+}
+
+func TestCacheReadErrorAndBothSourcesFail(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	cache := appmocks.NewMockDocumentCache(ctrl)
+	cache.EXPECT().Lookup(gomock.Any(), testVIN).Return(domain.CachedResult{}, false, errors.New("db down"))
+	cache.EXPECT().Store(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	a := New(Options{
+		Sources: []app.DocumentSource{
+			stubSource(ctrl, domain.SourceSales, nil, errors.New("down")),
+			stubSource(ctrl, domain.SourceService, nil, errors.New("down")),
+		},
+		DocumentCache: cache,
+	})
+	got, err := a.Documents(context.Background(), testVIN)
+	if !errors.Is(err, domain.ErrAllSourcesUnavailable) {
+		t.Fatalf("err = %v, want ErrAllSourcesUnavailable not driver text", err)
+	}
+	if sourceReport(t, got.Sources, domain.SourceSales).Status != domain.SourceStatusError {
+		t.Fatalf("sales report = %+v", got.Sources)
+	}
+}
+
 func TestCacheReadErrorFailsOpen(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)

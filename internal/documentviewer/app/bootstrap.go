@@ -9,6 +9,7 @@ import (
 
 	"github.com/ducnd58233/unified-document-viewer/configs"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/httpserver"
+	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/postgres"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
 
@@ -29,7 +30,14 @@ func Run(ctx context.Context) error {
 	defer func() { _ = logClose.Close() }()
 	slog.SetDefault(logger)
 
-	handler := mountHTTP(httpDeps{cfg: cfg, log: logger})
+	// Fail fast if Postgres is down; T6 will inject this pool into cache and audit.
+	pool, err := postgres.Open(ctx, cfg.Database.URL, cfg.Database.MaxConns)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	handler := mountHTTP(httpDeps{log: logger})
 
 	return httpserver.Serve(ctx, cfg.HTTP.Address, handler, logger)
 }

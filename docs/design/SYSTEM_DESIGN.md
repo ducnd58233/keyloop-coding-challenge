@@ -983,17 +983,14 @@ Naming the evidence per requirement is what stops observability from becoming de
 | **FR8 / NFR8** audit intact | `audit_writes_total{outcome}`; any failure is a compliance gap and alerts as critical |
 | VIN redaction | A log-capture test asserting the full VIN never appears. Not a `DRAFT.md` requirement - it comes from the data classification in `SPEC.md` §8 |
 
-### 8.6 Health endpoints
+### 8.6 Health endpoint
 
 | Endpoint | Checks | Deliberately does **not** check |
 |---|---|---|
-| `/healthz` | Process is alive. No dependencies | Anything that could cause a restart loop during a dependency outage |
-| `/readyz` | A pool connection can be acquired and pinged | **Upstream availability** |
+| `/healthz` | Process is alive | Database, upstreams |
 
-Excluding upstreams from readiness is deliberate. NFR1 says the service must serve useful degraded
-responses when an upstream is down. If upstream health removed instances from the load balancer, a
-Service System outage would take down the aggregator too, defeating NFR1 entirely. Upstream health
-belongs on a dashboard, not in a readiness gate.
+A dependency check here would restart the process during an outage, including the partial upstream
+outage NFR1 requires the service to survive. Compose probes `/healthz` only.
 
 ### 8.7 Scope honesty
 

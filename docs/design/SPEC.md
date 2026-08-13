@@ -52,7 +52,7 @@ Header: X-Request-Id   (optional; generated when absent)
 
 Response shape and the full status decision flow are in `SYSTEM_DESIGN.md` §5.2 and §5.4.
 
-Supporting endpoints: `/healthz`, `/readyz`, `/metrics`.
+Supporting endpoints: `/healthz`, `/metrics`.
 
 **Error code vocabulary.** `VIN_INVALID` and `ALL_SOURCES_UNAVAILABLE` come from `DRAFT.md` §8.
 `UPSTREAM_TIMEOUT` and `UPSTREAM_ERROR` are added for per-source reporting under FR7. No other codes
