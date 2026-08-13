@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"runtime/debug"
 
@@ -9,15 +10,18 @@ import (
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
 
-// Recover turns a panic in any handler into a logged 500 instead of a
-// crashed process. INTERNAL_ERROR is the one error code outside the FR7
-// per-source vocabulary in SPEC.md §2, added there for this safety net.
+// Recover turns a panic into a logged 500 instead of a crashed process.
+// INTERNAL_ERROR is the process safety net; it is not part of the FR7 per-source list.
 func Recover(l observability.Logger) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func(ctx context.Context) {
 				if x := recover(); x != nil {
-					l.ErrorContext(ctx, "panic recovered", "panic", x, "stack", string(debug.Stack()))
+					// Type only: panic values can carry a VIN or *url.Error.
+					l.ErrorContext(ctx, "panic recovered",
+						"panic_type", fmt.Sprintf("%T", x),
+						"stack", string(debug.Stack()),
+					)
 					httpserver.JSON(w, http.StatusInternalServerError, map[string]any{
 						"error": map[string]string{"code": "INTERNAL_ERROR"},
 					})
