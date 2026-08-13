@@ -95,6 +95,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "description": "Vehicle identification number",
+                        "example": "1HGCM82633",
                         "in": "path",
                         "name": "vin",
                         "required": true,

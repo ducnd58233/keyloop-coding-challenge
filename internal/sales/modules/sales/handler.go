@@ -49,7 +49,7 @@ func (s server) healthz(w http.ResponseWriter, _ *http.Request) {
 
 // list godoc
 // @Summary List sales documents for a VIN
-// @Param vin query string true "Vehicle identification number"
+// @Param vin query string true "Vehicle identification number" example(1HGCM82633)
 // @Success 200 {object} listResponse
 // @Failure 500 {string} string
 // @Failure 503 {string} string

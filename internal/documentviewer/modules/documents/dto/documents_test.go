@@ -57,6 +57,29 @@ func TestFromAggregateSnakeCaseSixA4Fields(t *testing.T) {
 	}
 }
 
+func TestErrorResponseHasMessageAndOptionalDetails(t *testing.T) {
+	t.Parallel()
+	raw, err := json.Marshal(InvalidVIN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+	if !strings.Contains(body, `"message"`) || !strings.Contains(body, `"details"`) || strings.Contains(body, `"code"`) {
+		t.Fatalf("400 body = %s", body)
+	}
+	if strings.Contains(body, testutil.TestVIN) {
+		t.Fatalf("VIN leaked in error: %s", body)
+	}
+	raw, err = json.Marshal(Unavailable())
+	if err != nil {
+		t.Fatal(err)
+	}
+	body = string(raw)
+	if !strings.Contains(body, `"message"`) || strings.Contains(body, `"details"`) || strings.Contains(body, `"code"`) {
+		t.Fatalf("503 body = %s", body)
+	}
+}
+
 func TestFromAggregateEmptyDocumentsIsArray(t *testing.T) {
 	t.Parallel()
 	raw, err := json.Marshal(FromAggregate("3N1AB7AP1D", "req-2", domain.AggregateResult{}))

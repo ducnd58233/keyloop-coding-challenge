@@ -65,21 +65,16 @@ const docTemplate = `{
                 },
                 "type": "object"
             },
-            "dto.ErrorBody": {
+            "dto.ErrorResponse": {
                 "properties": {
-                    "code": {
-                        "type": "string"
+                    "details": {
+                        "additionalProperties": {
+                            "type": "string"
+                        },
+                        "type": "object"
                     },
                     "message": {
                         "type": "string"
-                    }
-                },
-                "type": "object"
-            },
-            "dto.ErrorResponse": {
-                "properties": {
-                    "error": {
-                        "$ref": "#/components/schemas/dto.ErrorBody"
                     }
                 },
                 "type": "object"
@@ -132,6 +127,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "description": "Vehicle identification number",
+                        "example": "1HGCM82633",
                         "in": "path",
                         "name": "vin",
                         "required": true,

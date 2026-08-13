@@ -7,7 +7,6 @@ coverage.out
 !.env.example
 **/*_test.go
 docs
-examples
 logs
 *.md
 !go.mod

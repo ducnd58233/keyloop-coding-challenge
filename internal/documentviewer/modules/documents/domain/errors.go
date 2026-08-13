@@ -2,12 +2,10 @@ package domain
 
 import "errors"
 
-// Wire codes are FR7 vocabulary, not HTTP status text.
+// Wire codes on sources[].error (FR7). HTTP envelope errors use status, not these labels.
 const (
-	CodeInvalidVIN            = "VIN_INVALID"
-	CodeAllSourcesUnavailable = "ALL_SOURCES_UNAVAILABLE"
-	CodeUpstreamTimeout       = "UPSTREAM_TIMEOUT"
-	CodeUpstreamError         = "UPSTREAM_ERROR"
+	CodeUpstreamTimeout = "UPSTREAM_TIMEOUT"
+	CodeUpstreamError   = "UPSTREAM_ERROR"
 )
 
 var (
