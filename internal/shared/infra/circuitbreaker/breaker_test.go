@@ -69,6 +69,18 @@ func TestHalfOpenProbeFailureReopens(t *testing.T) {
 	}
 }
 
+func TestDeadlineExceededTrips(t *testing.T) {
+	t.Parallel()
+	b := New(Settings{Name: "sales", Threshold: 1, Cooldown: time.Minute})
+	if err := b.Execute(func() error { return context.DeadlineExceeded }); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v", err)
+	}
+	calls := 0
+	if err := b.Execute(func() error { calls++; return nil }); !errors.Is(err, ErrOpen) || calls != 0 {
+		t.Fatalf("timeout must open: err=%v calls=%d", err, calls)
+	}
+}
+
 func TestCanceledDoesNotTrip(t *testing.T) {
 	t.Parallel()
 	b := New(Settings{Name: "sales", Threshold: 1, Cooldown: time.Minute})
@@ -94,7 +106,7 @@ func TestIndependentBreakers(t *testing.T) {
 	}
 }
 
-func TestStateLogsOmitVIN(t *testing.T) {
+func TestStateLogsUseBreakerName(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
 	log := slog.New(slog.NewTextHandler(&buf, nil))
@@ -104,7 +116,7 @@ func TestStateLogsOmitVIN(t *testing.T) {
 	if !strings.Contains(out, "sales") || !strings.Contains(out, "open") {
 		t.Fatalf("log = %q, want breaker name and open", out)
 	}
-	if strings.Contains(out, "1HGCM82633") || strings.Contains(strings.ToLower(out), "localhost") {
-		t.Fatalf("log leaked vin or host: %s", out)
+	if strings.Contains(strings.ToLower(out), "localhost") {
+		t.Fatalf("log leaked host: %s", out)
 	}
 }

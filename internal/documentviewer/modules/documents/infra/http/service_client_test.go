@@ -78,7 +78,20 @@ func TestServiceClient5xxIsErrorWithoutVIN(t *testing.T) {
 	if err == nil {
 		t.Fatal("want error")
 	}
-	if strings.Contains(err.Error(), testVIN) {
-		t.Fatalf("error leaked vin: %v", err)
+	if strings.Contains(err.Error(), testVIN) || strings.Contains(err.Error(), "localhost") {
+		t.Fatalf("error leaked vin or host: %v", err)
+	}
+}
+
+func TestServiceClientEmptyAttachments(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, _ *nethttp.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"vehicleVin":"3N1AB7AP1D","attachments":[]}`)
+	}))
+	t.Cleanup(srv.Close)
+	docs, err := NewServiceClient(srv.URL).Fetch(context.Background(), "3N1AB7AP1D")
+	if err != nil || docs == nil || len(docs) != 0 {
+		t.Fatalf("FR6 empty: docs=%v err=%v", docs, err)
 	}
 }

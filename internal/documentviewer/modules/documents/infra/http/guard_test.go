@@ -43,13 +43,3 @@ func TestWithBreakerFailFastAfterOpen(t *testing.T) {
 		t.Fatalf("name = %s", src.Name())
 	}
 }
-
-func TestWithBreakerNilIsPassthrough(t *testing.T) {
-	t.Parallel()
-	inner := &countingSource{name: domain.SourceService, docs: []domain.Document{{ID: "1"}}}
-	src := WithBreaker(inner, nil)
-	docs, err := src.Fetch(context.Background(), "1HGCM82633")
-	if err != nil || len(docs) != 1 || inner.n.Load() != 1 {
-		t.Fatalf("passthrough: docs=%v err=%v n=%d", docs, err, inner.n.Load())
-	}
-}

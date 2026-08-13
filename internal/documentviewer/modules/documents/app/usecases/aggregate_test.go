@@ -12,6 +12,8 @@ import (
 	"github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/app"
 	appmocks "github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/app/mocks"
 	"github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/domain"
+	dochttp "github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/infra/http"
+	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/circuitbreaker"
 )
 
 const testVIN = "1HGCM82633"
@@ -163,6 +165,33 @@ func TestDocumentsBothOK(t *testing.T) {
 	}
 	if sourceReport(t, got.Sources, domain.SourceService).Status != domain.SourceStatusOK {
 		t.Fatalf("service report = %+v, want OK", got.Sources)
+	}
+}
+
+func TestOpenBreakerDoesNotCallInnerOrBlockSibling(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	salesInner := appmocks.NewMockDocumentSource(ctrl)
+	salesInner.EXPECT().Name().Return(domain.SourceSales).AnyTimes()
+	salesInner.EXPECT().Fetch(gomock.Any(), gomock.Any()).Times(0)
+	cb := circuitbreaker.New(circuitbreaker.Settings{Name: "sales", Threshold: 1, Cooldown: time.Minute})
+	_ = cb.Execute(func() error { return errors.New("sales down") })
+	service := stubSource(ctrl, domain.SourceService, []domain.Document{serviceDoc("2")}, nil)
+	a := newAgg(ctrl, false, dochttp.WithBreaker(salesInner, cb), service)
+	got, err := a.Documents(context.Background(), testVIN)
+	if err != nil {
+		t.Fatalf("err = %v, want partial", err)
+	}
+	if !got.Partial || len(got.Documents) != 1 || got.Documents[0].Source != domain.SourceService {
+		t.Fatalf("got %+v", got)
+	}
+	svc := sourceReport(t, got.Sources, domain.SourceService)
+	if svc.Status != domain.SourceStatusOK {
+		t.Fatalf("service = %+v", svc)
+	}
+	sales := sourceReport(t, got.Sources, domain.SourceSales)
+	if sales.Status != domain.SourceStatusError || sales.ErrorCode != domain.CodeUpstreamError {
+		t.Fatalf("open breaker sales = %+v", sales)
 	}
 }
 
