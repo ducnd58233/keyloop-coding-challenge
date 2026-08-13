@@ -123,8 +123,8 @@ are recorded as extension points in SYSTEM_DESIGN §9.2 and §12.
 
 - [x] **T1** - Design docs
 - [x] **T2** - Scaffold and walking skeleton
-- [ ] T3 - Two mock servers
-- [ ] T4 - Domain and aggregation core ← **critical path**
+- [x] **T3** - Two mock servers
+- [ ] T4 - Domain and aggregation core ← **in progress** (`feature/doc-viewer-task-4-aggregation`)
 - [ ] T5 - Persistence: cache + audit slices
 - [ ] T6 - HTTP layer
 - [ ] T7 - Observability
