@@ -1,4 +1,4 @@
-// Package api is the documents HTTP surface (FR1). It selects status per §5.4.
+// Package api is the documents HTTP surface (FR1). Status selection follows §5.4.
 package api
 
 import (
@@ -20,7 +20,7 @@ const (
 	maxHeaderLen  = 128
 )
 
-// DocumentsQuery is the aggregate use case. Declared here so api does not import usecases by name.
+// DocumentsQuery is declared here so api does not import usecases by name (R1).
 type DocumentsQuery interface {
 	Documents(ctx context.Context, vin string) (domain.AggregateResult, error)
 }
@@ -30,7 +30,7 @@ type AccessLog interface {
 	Record(ctx context.Context, vin, actorID, requestID string, result domain.AggregateResult, err error, latency time.Duration)
 }
 
-// Handler mounts GET /api/v1/vehicles/{vin}/documents.
+// Handler serves GET /api/v1/vehicles/{vin}/documents.
 type Handler struct {
 	query DocumentsQuery
 	audit AccessLog
@@ -42,7 +42,7 @@ func New(query DocumentsQuery, audit AccessLog, log observability.Logger) *Handl
 	return &Handler{query: query, audit: audit, log: log}
 }
 
-// Register attaches document routes to mux.
+// Register uses a constant route template so logs never contain a VIN.
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+routeTemplate, h.list)
 }
@@ -61,33 +61,28 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	result, err := h.query.Documents(r.Context(), vin)
 	latency := time.Since(start)
-	reqID := httpserver.RequestIDFrom(r.Context())
+	reqID := clipHeader(httpserver.RequestIDFrom(r.Context()))
 	actor := clipHeader(r.Header.Get("X-Actor-Id"))
 
-	if h.audit != nil {
-		h.audit.Record(r.Context(), vin, actor, reqID, result, err, latency)
-	}
-
 	status := http.StatusOK
+	var payload any
 	switch {
 	case errors.Is(err, domain.ErrInvalidVIN):
 		status = http.StatusBadRequest
-		h.trace(r.Context(), vin, status)
-		httpserver.JSON(w, status, dto.ErrorResponse{Error: dto.ErrorBody{Code: domain.CodeInvalidVIN}})
-		return
-	case errors.Is(err, domain.ErrAllSourcesUnavailable), errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
-		status = http.StatusServiceUnavailable
-		h.trace(r.Context(), vin, status)
-		httpserver.JSON(w, status, dto.ErrorResponse{Error: dto.ErrorBody{Code: domain.CodeAllSourcesUnavailable}})
-		return
+		payload = dto.ErrorResponse{Error: dto.ErrorBody{Code: domain.CodeInvalidVIN}}
 	case err != nil:
-		status = http.StatusInternalServerError
-		h.trace(r.Context(), vin, status)
-		httpserver.JSON(w, status, dto.ErrorResponse{Error: dto.ErrorBody{Code: "INTERNAL_ERROR"}})
-		return
+		// Unexpected errors stay inside SPEC §2: 503 ALL_SOURCES_UNAVAILABLE, not INTERNAL_ERROR.
+		status = http.StatusServiceUnavailable
+		payload = dto.ErrorResponse{Error: dto.ErrorBody{Code: domain.CodeAllSourcesUnavailable}}
 	default:
-		h.trace(r.Context(), vin, status)
-		httpserver.JSON(w, status, dto.FromAggregate(vin, reqID, result))
+		payload = dto.FromAggregate(vin, reqID, result)
+	}
+
+	h.trace(r.Context(), vin, status)
+	httpserver.JSON(w, status, payload)
+	// Write first so a slow FR8 insert cannot blow the NFR4 budget.
+	if h.audit != nil {
+		h.audit.Record(r.Context(), vin, actor, reqID, result, err, latency)
 	}
 }
 
