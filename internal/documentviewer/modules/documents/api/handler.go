@@ -50,7 +50,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 
 // list godoc
 // @Summary List documents for a VIN
-// @Param vin path string true "Vehicle identification number"
+// @Param vin path string true "Vehicle identification number" example(1HGCM82633)
 // @Param X-Actor-Id header string false "Actor recorded on the audit trail"
 // @Param X-Request-Id header string false "Caller correlation id"
 // @Success 200 {object} dto.DocumentsResponse
@@ -76,10 +76,10 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	h.trace(r.Context(), vin, status)
 	switch {
 	case errors.Is(err, domain.ErrInvalidVIN):
-		httpserver.JSON(w, status, dto.ErrorResponse{Error: dto.ErrorBody{Code: domain.CodeInvalidVIN}})
+		httpserver.JSON(w, status, dto.InvalidVIN())
 	case err != nil:
-		// Unexpected errors stay inside SPEC §2: 503 ALL_SOURCES_UNAVAILABLE, not INTERNAL_ERROR.
-		httpserver.JSON(w, status, dto.ErrorResponse{Error: dto.ErrorBody{Code: domain.CodeAllSourcesUnavailable}})
+		// Unexpected errors stay 503 with a safe message, not driver text.
+		httpserver.JSON(w, status, dto.Unavailable())
 	default:
 		httpserver.JSON(w, status, dto.FromAggregate(vin, reqID, result))
 	}

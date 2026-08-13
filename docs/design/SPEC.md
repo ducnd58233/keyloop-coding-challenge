@@ -47,16 +47,16 @@ Header: X-Request-Id   (optional; generated when absent)
 | Status | When | Body |
 |---|---|---|
 | `200` | Any result was produced, complete or not | Documents + `sources[]` + `partial` + `served_from_cache` + `stale` |
-| `400` | VIN fails the A1 format check | `{"error":{"code":"VIN_INVALID"}}` |
-| `503` | All sources failed and no cached entry exists (FR10) | `{"error":{"code":"ALL_SOURCES_UNAVAILABLE"}}` |
+| `400` | VIN fails the A1 format check | `{"message":"VIN format is invalid","details":{"vin":"must be exactly 10 alphanumeric characters"}}` |
+| `503` | All sources failed and no cached entry exists (FR10) | `{"message":"all document sources are unavailable"}` |
 
 Response shape and the full status decision flow are in `SYSTEM_DESIGN.md` §5.2 and §5.4.
 
-Supporting endpoints: `/healthz`, `/metrics`.
+Supporting endpoints: `/healthz`, `/metrics`, `/openapi.json`, `/docs`.
 
-**Error code vocabulary.** `VIN_INVALID` and `ALL_SOURCES_UNAVAILABLE` come from `DRAFT.md` §8.
-`UPSTREAM_TIMEOUT` and `UPSTREAM_ERROR` are added for per-source reporting under FR7. No other codes
-without updating this list.
+**Error envelope.** HTTP status is the code. The body has `message` and, for validation only,
+`details` (field → reason). It never echoes the submitted VIN. Per-source FR7 codes
+(`UPSTREAM_TIMEOUT`, `UPSTREAM_ERROR`) stay on `sources[].error`, not on the envelope.
 
 ---
 
@@ -156,7 +156,6 @@ deployments/docker/
 migrations/                        golang-migrate pairs, applied by `make migrate-up`
 bin/                               tools installed by `make tools` (gitignored)
 docs/design/                       DRAFT.md, SPEC.md, SYSTEM_DESIGN.md, TASKS.md
-examples/curl.md
 .env.example                       committed template
 .env                               local overrides, gitignored; copy from .env.example
 Makefile

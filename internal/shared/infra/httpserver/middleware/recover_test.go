@@ -32,15 +32,17 @@ func TestRecoverMapsPanicToInternalError(t *testing.T) {
 	}
 
 	var payload struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
+		Message string            `json:"message"`
+		Details map[string]string `json:"details"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload.Error.Code != "INTERNAL_ERROR" {
-		t.Fatalf("code = %q, want INTERNAL_ERROR", payload.Error.Code)
+	if payload.Message != msgInternal || payload.Details != nil {
+		t.Fatalf("body = %+v", payload)
+	}
+	if strings.Contains(body, `"code"`) || strings.Contains(body, "INTERNAL_ERROR") {
+		t.Fatalf("error leaked code: %s", body)
 	}
 }
 

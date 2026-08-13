@@ -63,8 +63,11 @@ func TestListInvalidVINIs400AndAudited(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Error.Code != domain.CodeInvalidVIN {
-		t.Fatalf("code = %q", body.Error.Code)
+	if body.Message != dto.MsgInvalidVIN || body.Details[dto.FieldVIN] != dto.DetailVINFormat {
+		t.Fatalf("body = %+v", body)
+	}
+	if strings.Contains(rec.Body.String(), `"code"`) || strings.Contains(rec.Body.String(), "1HGCM8263") {
+		t.Fatalf("error leaked code or VIN: %s", rec.Body.String())
 	}
 	if audit.n != 1 || audit.vin != "1HGCM8263" || audit.actor != "advisor-1" || !errors.Is(audit.err, domain.ErrInvalidVIN) {
 		t.Fatalf("audit = %+v", audit)
@@ -134,8 +137,15 @@ func TestListUnexpectedErrorIs503AllSourcesUnavailable(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), domain.CodeAllSourcesUnavailable) || strings.Contains(rec.Body.String(), "INTERNAL_ERROR") {
+	if rec.Body.String() == "" || strings.Contains(rec.Body.String(), `"code"`) || strings.Contains(rec.Body.String(), "INTERNAL_ERROR") || strings.Contains(rec.Body.String(), "boom") {
 		t.Fatalf("body = %s", rec.Body.String())
+	}
+	var unexpected dto.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &unexpected); err != nil {
+		t.Fatal(err)
+	}
+	if unexpected.Message != dto.MsgUnavailable || unexpected.Details != nil {
+		t.Fatalf("body = %+v", unexpected)
 	}
 	if audit.n != 1 {
 		t.Fatalf("FR8 audit missing: %+v", audit)
@@ -160,8 +170,11 @@ func TestListAllSourcesDownIs503(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.Error.Code != domain.CodeAllSourcesUnavailable {
-		t.Fatalf("code = %q", body.Error.Code)
+	if body.Message != dto.MsgUnavailable || body.Details != nil {
+		t.Fatalf("body = %+v", body)
+	}
+	if strings.Contains(rec.Body.String(), `"code"`) {
+		t.Fatalf("error leaked code: %s", rec.Body.String())
 	}
 	if audit.n != 1 || !errors.Is(audit.err, domain.ErrAllSourcesUnavailable) {
 		t.Fatalf("FR8 audit missing: %+v", audit)
@@ -314,7 +327,7 @@ func TestListRequestTimeoutIs503(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503; body=%s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), domain.CodeAllSourcesUnavailable) {
+	if !strings.Contains(rec.Body.String(), dto.MsgUnavailable) || strings.Contains(rec.Body.String(), `"code"`) {
 		t.Fatalf("body = %s", rec.Body.String())
 	}
 	if audit.n != 1 || !errors.Is(audit.err, context.DeadlineExceeded) && !errors.Is(audit.err, context.Canceled) {

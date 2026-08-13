@@ -90,7 +90,7 @@ implementation.
 label, or error code that appears three or more times, or that is a closed set (source name,
 outcome, error code we own), must be a named `const` next to the type that owns it. Do not dump a
 `constants.go` kitchen sink. Closed wire vocabularies are typed string constants (`SourceName`,
-`SourceStatus`, `CodeInvalidVIN`), not iota ints, because they serialize as labels. Integer
+`SourceStatus`, `CodeUpstreamTimeout`), not iota ints, because they serialize as labels. Integer
 machine states with no wire label use `iota` on a named type; start at `iota + 1` unless zero is
 the intended default (breaker `closed`). Reuse stdlib names (`http.StatusOK`, `time.Second`)
 instead of wrapping them. One-off literals at a single call site, struct tags, SQL `$n`

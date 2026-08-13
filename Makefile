@@ -1,5 +1,3 @@
-APP=unified-document-viewer
-
 # Override if needed, e.g. make tools GO=/path/to/go
 GO ?= go
 GOINSTALL ?= $(GO) install
@@ -16,10 +14,8 @@ else
 EXE :=
 endif
 
-COMPOSE_DIR=deployments/docker
-COMPOSE_INFRA=$(COMPOSE_DIR)/docker-compose.infra.yaml
-COMPOSE_ALL=$(COMPOSE_DIR)/docker-compose.yaml
-COMPOSE_PROJECT=$(APP)
+COMPOSE = docker compose -f deployments/docker/docker-compose.yaml
+COMPOSE_INFRA = docker compose -f deployments/docker/docker-compose.infra.yaml
 
 MIGRATIONS_DIR=migrations
 DATABASE_URL ?= postgres://viewer:viewer@localhost:5432/viewer?sslmode=disable
@@ -29,7 +25,6 @@ MIGRATE=$(TOOLS_DIR)/migrate$(EXE)
 MOCKGEN=$(TOOLS_DIR)/mockgen$(EXE)
 SWAG=$(TOOLS_DIR)/swag$(EXE)
 
-DOCKER_IMAGE ?= $(APP):local
 VERSION ?= dev
 
 # cmd/<name>/ is the service list. Override: make SERVICES="sales service documentviewer"
@@ -206,29 +201,28 @@ migrate-down: $(MIGRATE) ## Roll back one migration
 	$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" down 1
 
 # ---------------------------------------------------------------------------
-# Docker - infra only vs full stack
+# Docker - compose `name:` is the project; no -p override
 # ---------------------------------------------------------------------------
 
 infra-up: ## Start PostgreSQL 18 (after a major bump: make db-reset)
-	docker compose -p $(COMPOSE_PROJECT) -f $(COMPOSE_INFRA) up -d --wait
+	$(COMPOSE_INFRA) up -d --wait
 
-infra-down: ## Stop infrastructure
-	docker compose -p $(COMPOSE_PROJECT) -f $(COMPOSE_INFRA) down
+infra-down: ## Stop PostgreSQL
+	$(COMPOSE_INFRA) down
 
-stack-up: ## Build and start infrastructure + all services
-	docker compose -p $(COMPOSE_PROJECT) -f $(COMPOSE_ALL) up -d --wait --build
+stack-up: ## Build and start Postgres + all services
+	$(COMPOSE) up -d --wait --build
 
-stack-down: ## Stop infrastructure + all services
-	docker compose -p $(COMPOSE_PROJECT) -f $(COMPOSE_ALL) down --remove-orphans
+stack-down: ## Stop Postgres + all services
+	$(COMPOSE) down
 
-db-up: infra-up ## Alias: start PostgreSQL (same as infra-up)
+db-up: infra-up ## Alias for infra-up
 
-db-down: infra-down ## Alias: stop PostgreSQL (same as infra-down)
+db-down: infra-down ## Alias for infra-down
 
-# Drops the volume too - use after a Postgres major bump or a bad migration.
-db-reset: ## Stop PostgreSQL, drop the volume, start clean
-	docker compose -p $(COMPOSE_PROJECT) -f $(COMPOSE_INFRA) down -v
-	docker compose -p $(COMPOSE_PROJECT) -f $(COMPOSE_INFRA) up -d --wait
+db-reset: ## Recreate Postgres and drop the volume (PG major bump / bad migration)
+	$(COMPOSE_INFRA) down -v
+	$(COMPOSE_INFRA) up -d --wait
 
 # ---------------------------------------------------------------------------
 # Build

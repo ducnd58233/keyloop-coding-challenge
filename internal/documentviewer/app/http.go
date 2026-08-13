@@ -4,9 +4,11 @@ import (
 	"net/http"
 	"time"
 
+	viewdocs "github.com/ducnd58233/unified-document-viewer/api/documentviewer/http/docs"
 	docsapi "github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/api"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/httpserver"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/httpserver/middleware"
+	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/openapidocs"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
 
@@ -19,6 +21,7 @@ type httpDeps struct {
 func mountHTTP(d httpDeps) http.Handler {
 	mux := http.NewServeMux()
 	registerHealth(mux)
+	openapidocs.Mount(mux, viewdocs.SwaggerInfo)
 	if d.docs != nil {
 		d.docs.Register(mux)
 	}

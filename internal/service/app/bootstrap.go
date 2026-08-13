@@ -5,11 +5,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 
+	servicedocs "github.com/ducnd58233/unified-document-viewer/api/service/http/docs"
 	"github.com/ducnd58233/unified-document-viewer/internal/service/modules/service"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/httpserver"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/httpserver/middleware"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/lifecycle"
+	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/openapidocs"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/mockfault"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
@@ -66,13 +69,16 @@ func Run(ctx context.Context, opt RunOptions) error {
 		slog.Duration("timeout_for", fault.TimeoutFor),
 	)
 
+	mux := http.NewServeMux()
+	openapidocs.Mount(mux, servicedocs.SwaggerInfo)
+	mux.Handle("/", service.New(service.Options{
+		Fault:    fault,
+		BaseURL:  opt.BaseURL,
+		Generate: generate,
+		Log:      logger,
+	}))
 	h := middleware.Chain(
-		service.New(service.Options{
-			Fault:    fault,
-			BaseURL:  opt.BaseURL,
-			Generate: generate,
-			Log:      logger,
-		}),
+		mux,
 		middleware.RequestID,
 		middleware.Recover(logger),
 	)

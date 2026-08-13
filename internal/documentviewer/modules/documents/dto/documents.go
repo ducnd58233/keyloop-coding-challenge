@@ -8,15 +8,32 @@ import (
 	"github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/domain"
 )
 
-// ErrorBody is the SPEC §2 error object. Message is omitted on 400/503 codes.
-type ErrorBody struct {
-	Code    string `json:"code"`
-	Message string `json:"message,omitempty"`
+// ErrorResponse is the viewer error envelope. HTTP status is the code;
+// details is only set for field validation (400).
+type ErrorResponse struct {
+	Message string            `json:"message"`
+	Details map[string]string `json:"details,omitempty"`
 }
 
-// ErrorResponse is the SPEC §2 envelope; no extra fields reach the client.
-type ErrorResponse struct {
-	Error ErrorBody `json:"error"`
+// Envelope copy is fixed so 400/503 stay stable for clients and OpenAPI.
+const (
+	MsgInvalidVIN   = "VIN format is invalid"
+	MsgUnavailable  = "all document sources are unavailable"
+	FieldVIN        = "vin"
+	DetailVINFormat = "must be exactly 10 alphanumeric characters"
+)
+
+// InvalidVIN is 400. Details name the field; they never echo the submitted VIN.
+func InvalidVIN() ErrorResponse {
+	return ErrorResponse{
+		Message: MsgInvalidVIN,
+		Details: map[string]string{FieldVIN: DetailVINFormat},
+	}
+}
+
+// Unavailable is 503. No details: this is not a validation failure.
+func Unavailable() ErrorResponse {
+	return ErrorResponse{Message: MsgUnavailable}
 }
 
 // Document is exactly the six A4 fields in snake_case.
