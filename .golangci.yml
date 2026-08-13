@@ -18,6 +18,7 @@ linters:
     - unconvert
     - wastedassign
   exclusions:
+    generated: lax
     rules:
       # Test files may hard-code fixtures and skip error wrapping.
       - path: _test\.go

@@ -1,0 +1,13 @@
+.git
+.github
+bin
+coverage.out
+.env
+.env.*
+!.env.example
+**/*_test.go
+docs
+examples
+*.md
+!go.mod
+!go.sum

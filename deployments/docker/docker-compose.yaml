@@ -1,21 +1,5 @@
 name: unified-document-viewer
 
-services:
-  postgres:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_USER: viewer
-      POSTGRES_PASSWORD: viewer
-      POSTGRES_DB: viewer
-    ports: ["5432:5432"]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U viewer -d viewer"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 10s
-    volumes: ["postgres-data:/var/lib/postgresql/data"]
-    restart: unless-stopped
-
-volumes:
-  postgres-data:
+include:
+  - path: docker-compose.infra.yaml
+  - path: docker-compose.services.yaml

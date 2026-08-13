@@ -16,7 +16,10 @@ else
 EXE :=
 endif
 
-COMPOSE=deployments/docker/docker-compose.yaml
+COMPOSE_DIR=deployments/docker
+COMPOSE_INFRA=$(COMPOSE_DIR)/docker-compose.infra.yaml
+COMPOSE_ALL=$(COMPOSE_DIR)/docker-compose.yaml
+COMPOSE_PROJECT=$(APP)
 
 MIGRATIONS_DIR=migrations
 DATABASE_URL ?= postgres://viewer:viewer@localhost:5432/viewer?sslmode=disable
@@ -33,15 +36,18 @@ VERSION ?= dev
 SALES_ADDR ?= :9100
 SERVICE_ADDR ?= :9101
 
-# Directories swag scans for annotations: general info first, then module surfaces.
-SWAG_DIRS = cmd/api,internal/modules/documents/api,internal/shared/infra/httpserver
+SWAG_DOCUMENTVIEWER = cmd/documentviewer,internal/documentviewer/modules/documents/api,internal/shared/infra/httpserver
+SWAG_SALES = cmd/sales,internal/sales/modules/sales
+SWAG_SERVICE = cmd/service,internal/service/modules/service
 
 .DEFAULT_GOAL := help
 
 .PHONY: help tools run mocks dev demo-degraded \
-	test test-race test-integration cover vet fmt tidy lint generate \
-	openapi openapi-check \
+	test test-race test-integration cover vet fmt tidy lint \
+	generate mocks-gen mocks-gen-documentviewer mocks-gen-sales mocks-gen-service \
+	openapi openapi-check openapi-documentviewer openapi-sales openapi-service \
 	new-migrate migrate-up migrate-down \
+	infra-up infra-down stack-up stack-down \
 	db-up db-down db-reset build clean
 
 # ---------------------------------------------------------------------------
@@ -50,7 +56,7 @@ SWAG_DIRS = cmd/api,internal/modules/documents/api,internal/shared/infra/httpser
 # ---------------------------------------------------------------------------
 
 help: ## Show this help
-	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-17s %s%s", $$1, $$2, ORS}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-22s %s%s", $$1, $$2, ORS}' $(MAKEFILE_LIST)
 
 # ---------------------------------------------------------------------------
 # Tools - installed on demand into ./bin, never into the user's GOPATH
@@ -74,26 +80,26 @@ $(SWAG):
 # Run / develop
 # ---------------------------------------------------------------------------
 
-run: ## Run the API alone (expects db + mocks already up)
-	$(GO) run ./cmd/api
+run: ## Run the document-viewer API alone (expects db + mocks already up)
+	$(GO) run ./cmd/documentviewer
 
 # Both mock upstreams, foreground. Use a second terminal, or use `make dev`.
 mocks: ## Run both mock upstreams in the foreground
-	$(GO) run ./cmd/mock-sales -addr $(SALES_ADDR) & \
-	$(GO) run ./cmd/mock-service -addr $(SERVICE_ADDR) & \
+	$(GO) run ./cmd/sales -addr $(SALES_ADDR) & \
+	$(GO) run ./cmd/service -addr $(SERVICE_ADDR) & \
 	wait
 
 # The one command a reviewer needs: database, schema, mocks, API.
-dev: db-up migrate-up ## db + migrations + both mocks + API. The one command to run the system
-	$(GO) run ./cmd/mock-sales -addr $(SALES_ADDR) & \
-	$(GO) run ./cmd/mock-service -addr $(SERVICE_ADDR) & \
-	$(GO) run ./cmd/api
+dev: infra-up migrate-up ## db + migrations + both mocks + API. The one command to run the system
+	$(GO) run ./cmd/sales -addr $(SALES_ADDR) & \
+	$(GO) run ./cmd/service -addr $(SERVICE_ADDR) & \
+	$(GO) run ./cmd/documentviewer
 
 # Same, with the Service upstream forced down, to demonstrate FR7 partial results.
-demo-degraded: db-up migrate-up ## Same as dev but with the Service upstream down (demonstrates FR7)
-	$(GO) run ./cmd/mock-sales -addr $(SALES_ADDR) & \
-	$(GO) run ./cmd/mock-service -addr $(SERVICE_ADDR) -down & \
-	$(GO) run ./cmd/api
+demo-degraded: infra-up migrate-up ## Same as dev but with the Service upstream down (demonstrates FR7)
+	$(GO) run ./cmd/sales -addr $(SALES_ADDR) & \
+	$(GO) run ./cmd/service -addr $(SERVICE_ADDR) -down & \
+	$(GO) run ./cmd/documentviewer
 
 # ---------------------------------------------------------------------------
 # Test / quality
@@ -106,7 +112,7 @@ test: ## Unit tests
 test-race: ## Unit tests under -race. Gate for anything concurrent
 	$(GO) test -race ./...
 
-# Needs a running database: make db-up migrate-up first.
+# Needs a running database: make infra-up migrate-up first.
 test-integration: ## Integration tests (build tag), needs a live database
 	$(GO) test -tags=integration ./internal/...
 
@@ -126,19 +132,44 @@ tidy: ## go mod tidy
 lint: $(GOLANGCI_LINT) ## golangci-lint run ./...
 	$(GOLANGCI_LINT) run ./...
 
-generate: $(MOCKGEN) ## Run go:generate (mockgen)
-	GOTOOLCHAIN=$(GOTOOLCHAIN) $(GO) generate ./internal/...
-
 # ---------------------------------------------------------------------------
-# OpenAPI - annotations become api/http/docs/{docs.go,swagger.yaml,swagger.json}
+# Codegen - mocks (go:generate mockgen) and OpenAPI (swag)
 # ---------------------------------------------------------------------------
 
-openapi: $(SWAG) ## Regenerate api/http/docs from handler annotations
-	$(SWAG) init --v3.1 -g docs.go -d $(SWAG_DIRS) -o ./api/http/docs --outputTypes go,yaml,json
+generate: mocks-gen openapi ## Generate everything: mockgen mocks + OpenAPI docs
+
+mocks-gen: mocks-gen-documentviewer mocks-gen-sales mocks-gen-service ## Run go:generate mockgen per microservice
+
+mocks-gen-documentviewer: $(MOCKGEN) ## mockgen for documentviewer modules
+	GOTOOLCHAIN=$(GOTOOLCHAIN) $(GO) generate ./internal/documentviewer/...
+
+mocks-gen-sales: $(MOCKGEN) ## mockgen for sales modules (no-op until ports grow)
+	GOTOOLCHAIN=$(GOTOOLCHAIN) $(GO) generate ./internal/sales/...
+
+mocks-gen-service: $(MOCKGEN) ## mockgen for service modules (no-op until ports grow)
+	GOTOOLCHAIN=$(GOTOOLCHAIN) $(GO) generate ./internal/service/...
+
+# ---------------------------------------------------------------------------
+# OpenAPI - annotations become api/<service>/http/docs/{docs.go,swagger.yaml,swagger.json}
+# ---------------------------------------------------------------------------
+
+openapi: openapi-documentviewer openapi-sales openapi-service ## Regenerate all service OpenAPI contracts
+
+openapi-documentviewer: $(SWAG) ## Regenerate api/documentviewer/http/docs
+	$(SWAG) init --v3.1 -g docs.go -d $(SWAG_DOCUMENTVIEWER) -o ./api/documentviewer/http/docs --outputTypes go,yaml,json
+
+openapi-sales: $(SWAG) ## Regenerate api/sales/http/docs
+	$(SWAG) init --v3.1 -g docs.go -d $(SWAG_SALES) -o ./api/sales/http/docs --outputTypes go,yaml,json
+
+openapi-service: $(SWAG) ## Regenerate api/service/http/docs
+	$(SWAG) init --v3.1 -g docs.go -d $(SWAG_SERVICE) -o ./api/service/http/docs --outputTypes go,yaml,json
 
 # CI gate: fails if the committed contract has drifted from the handlers.
-openapi-check: openapi ## Fail if the committed contract has drifted from the code
-	@git diff --exit-code -- api/http/docs/docs.go api/http/docs/swagger.yaml api/http/docs/swagger.json \
+openapi-check: openapi ## Fail if any committed contract has drifted from the code
+	@git diff --exit-code -- \
+		api/documentviewer/http/docs/docs.go api/documentviewer/http/docs/swagger.yaml api/documentviewer/http/docs/swagger.json \
+		api/sales/http/docs/docs.go api/sales/http/docs/swagger.yaml api/sales/http/docs/swagger.json \
+		api/service/http/docs/docs.go api/service/http/docs/swagger.yaml api/service/http/docs/swagger.json \
 		|| (echo "openapi out of date; run make openapi and commit" && exit 1)
 
 # ---------------------------------------------------------------------------
@@ -159,28 +190,38 @@ migrate-down: $(MIGRATE) ## Roll back one migration
 	$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" down 1
 
 # ---------------------------------------------------------------------------
-# Database container
+# Docker - infra only vs full stack
 # ---------------------------------------------------------------------------
 
-db-up: ## Start PostgreSQL and wait for its healthcheck
-	docker compose -f $(COMPOSE) up -d --wait
+infra-up: ## Start infrastructure only (PostgreSQL)
+	docker compose -p $(COMPOSE_PROJECT) -f $(COMPOSE_INFRA) up -d --wait
 
-db-down: ## Stop PostgreSQL
-	docker compose -f $(COMPOSE) down
+infra-down: ## Stop infrastructure
+	docker compose -p $(COMPOSE_PROJECT) -f $(COMPOSE_INFRA) down
+
+stack-up: ## Build and start infrastructure + all services
+	docker compose -p $(COMPOSE_PROJECT) -f $(COMPOSE_ALL) up -d --wait --build
+
+stack-down: ## Stop infrastructure + all services
+	docker compose -p $(COMPOSE_PROJECT) -f $(COMPOSE_ALL) down --remove-orphans
+
+db-up: infra-up ## Alias: start PostgreSQL (same as infra-up)
+
+db-down: infra-down ## Alias: stop PostgreSQL (same as infra-down)
 
 # Drops the volume too - use when a migration needs a clean slate.
 db-reset: ## Stop PostgreSQL, drop the volume, start clean
-	docker compose -f $(COMPOSE) down -v
-	docker compose -f $(COMPOSE) up -d --wait
+	docker compose -p $(COMPOSE_PROJECT) -f $(COMPOSE_INFRA) down -v
+	docker compose -p $(COMPOSE_PROJECT) -f $(COMPOSE_INFRA) up -d --wait
 
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
 
 build: ## Build all three binaries into ./bin
-	$(GO) build -ldflags "-X main.version=$(VERSION)" -o bin/api$(EXE) ./cmd/api
-	$(GO) build -o bin/mock-sales$(EXE) ./cmd/mock-sales
-	$(GO) build -o bin/mock-service$(EXE) ./cmd/mock-service
+	$(GO) build -ldflags "-X main.version=$(VERSION)" -o bin/documentviewer$(EXE) ./cmd/documentviewer
+	$(GO) build -o bin/sales$(EXE) ./cmd/sales
+	$(GO) build -o bin/service$(EXE) ./cmd/service
 
 clean: ## Remove ./bin and coverage output
 	rm -rf bin coverage.out

@@ -1,0 +1,67 @@
+services:
+  documentviewer:
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile
+      args:
+        SERVICE: documentviewer
+        VERSION: ${VERSION:-dev}
+    image: unified-document-viewer/documentviewer:local
+    ports: ["8080:8080"]
+    environment:
+      HTTP_ADDR: :8080
+      DATABASE_URL: postgres://viewer:viewer@postgres:5432/viewer?sslmode=disable
+      SALES_BASE_URL: http://sales:9100
+      SERVICE_BASE_URL: http://service:9101
+      LOG_LEVEL: info
+      VIN_HASH_SALT: ${VIN_HASH_SALT:-dev-only-not-a-secret}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      sales:
+        condition: service_healthy
+      service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 8s
+    restart: unless-stopped
+
+  sales:
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile
+      args:
+        SERVICE: sales
+        VERSION: ${VERSION:-dev}
+    image: unified-document-viewer/sales:local
+    ports: ["9100:9100"]
+    command: ["-addr", ":9100"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9100/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  service:
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile
+      args:
+        SERVICE: service
+        VERSION: ${VERSION:-dev}
+    image: unified-document-viewer/service:local
+    ports: ["9101:9101"]
+    command: ["-addr", ":9101", "-base-url", "http://localhost:9101"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9101/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
