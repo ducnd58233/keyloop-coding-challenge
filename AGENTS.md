@@ -61,9 +61,10 @@ failure (FR8). The rule still holds.
 **R5 - No SQL outside `infra/persistence`.** Query text, driver types and `pgx` imports stay in the
 adapters. SQL leaking upward is how a database-agnostic design quietly becomes database-shaped.
 
-**R6 - Only the composition root names concrete types.** `internal/app/bootstrap.go` constructs every
-adapter and wires it to a port. One file to read to know what the running system is, one file to
-change to swap an implementation.
+**R6 - Each binary has one composition root.** `internal/<service>/app/` constructs every adapter
+for that binary and wires it to a port. Modules for that binary live in
+`internal/<service>/modules/<module>/`. `cmd/<service>` only handles signals. One directory per
+running system to read, one directory to change to swap an implementation.
 
 ## Code style
 
@@ -93,7 +94,7 @@ change to swap an implementation.
 - Any `git commit`, push, branch deletion or pull request.
 - Adding a dependency, or any exception to R1-R6.
 - Editing `docs/design/DRAFT.md` - it is the source of truth, not a working file.
-- Changing the public API contract once `api/http/docs/` exists.
+- Changing the public API contract once `api/<service>/http/docs/` exists.
 
 **Never**
 
@@ -108,6 +109,7 @@ change to swap an implementation.
 - Hand-type or recall a command from memory when a CLI can produce or verify it. Flags and syntax
   drift between tool versions; `make help` and the tool's own `--help` are authoritative, memory
   is not.
+- Suppress a linter with `//nolint` or an equivalent ignore. Fix the code.
 
 ## Before you write the aggregator
 

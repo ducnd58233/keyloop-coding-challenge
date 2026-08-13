@@ -343,7 +343,7 @@ flowchart TB
         C3["Go integration test harness"]
     end
 
-    subgraph app["unified-document-viewer - cmd/api"]
+    subgraph app["unified-document-viewer - cmd/documentviewer"]
         direction TB
         MW["Middleware chain<br/>request ID, structured log, panic recover, metrics, timeout"]
         HDL["Documents handler<br/>DTO mapping, HTTP status selection"]
@@ -355,8 +355,8 @@ flowchart TB
     end
 
     subgraph mocks["Mocked upstreams - two separate servers, A5"]
-        SALES["cmd/mock-sales<br/>port 9100<br/>snake_case, epoch seconds"]
-        SERVICE["cmd/mock-service<br/>port 9101<br/>camelCase, RFC3339, nested"]
+        SALES["cmd/sales<br/>port 9100<br/>snake_case, epoch seconds"]
+        SERVICE["cmd/service<br/>port 9101<br/>camelCase, RFC3339, nested"]
     end
 
     DB[("PostgreSQL 17<br/>document_cache<br/>search_audit")]
@@ -384,7 +384,7 @@ Domain logic depends on interfaces, never on HTTP clients or SQL. This is what m
 matrix in §9.4 testable with no network.
 
 ```go
-// internal/modules/documents/app/ports.go
+// internal/documentviewer/modules/documents/app/ports.go
 type DocumentSource interface {
     Name() domain.SourceName
     Fetch(ctx context.Context, vin string) ([]domain.Document, error)
@@ -395,7 +395,7 @@ type CacheStore interface {
     Store(ctx context.Context, vin string, r domain.AggregateResult, ttl time.Duration) error
 }
 
-// internal/modules/audit/app/ports.go
+// internal/documentviewer/modules/audit/app/ports.go
 type AccessRecorder interface {
     Record(ctx context.Context, e domain.AccessEvent) error  // append-only, NFR8
 }
@@ -413,6 +413,12 @@ The codebase is organised as **vertical slices**. Each module owns its own `api`
 `dto` and `infra`; cross-cutting technical concerns live in `shared`. Configuration is a package at
 the repository root.
 
+`api` is the driving (inbound) adapter; `infra` is the driven (outbound) adapter. That is hexagonal
+architecture under Clean Architecture names: Three Dots Labs note that ports and adapters "can be
+called different names, like interfaces and infrastructure". A single `<module>/{app,domain,adapters}`
+tree would dump HTTP handlers and SQL into one folder and erase the R2 arrow (`api` → `app` →
+`domain`, `infra` implements ports). `dto` stays beside `api` so JSON tags never enter `domain`.
+
 Six rules keep the structure from eroding - modules interact only through ports, one repository per
 table, transactions owned by the use case, no SQL above `infra`. Being enforcement rules rather than
 design rationale they live in [`AGENTS.md`](../../AGENTS.md) beside the code, and are referenced here
@@ -423,63 +429,74 @@ Target layout after T8. T2 holds the directories with `doc.go` stubs until each 
 ```
 .
 ├── api/
-│   └── http/
-│       └── docs/                     generated OpenAPI 3.1 - swagger.yaml, swagger.json, docs.go
+│   ├── documentviewer/http/docs/     generated OpenAPI 3.1 for the viewer
+│   ├── sales/http/docs/              generated OpenAPI 3.1 for the sales mock
+│   └── service/http/docs/            generated OpenAPI 3.1 for the service mock
 ├── cmd/
-│   ├── api/
-│   │   ├── main.go                   service entrypoint
+│   ├── documentviewer/
+│   │   ├── main.go                   viewer entrypoint
 │   │   └── docs.go                   swag general API annotations
-│   ├── mock-sales/main.go            Sales System mock, port 9100      (A5)
-│   └── mock-service/main.go          Service System mock, port 9101    (A5)
+│   ├── sales/main.go                 Sales System mock, port 9100      (A5)
+│   └── service/main.go               Service System mock, port 9101    (A5)
 ├── configs/                          package configs - repository root, not internal
 │   ├── config.go                     Config struct + Load()
 │   ├── env.go                        env / duration / integer / float / boolean helpers
 │   ├── http.go                       server address and request budget
-│   ├── sources.go                    upstream URLs, timeouts, mock fault flags
+│   ├── sources.go                    upstream URLs and timeouts
 │   ├── cache.go                      CACHE_TTL
 │   ├── database.go                   DATABASE_URL, DB_MAX_CONNS
 │   └── log.go                        LOG_LEVEL, VIN_HASH_SALT
 ├── internal/
-│   ├── app/                          composition root
-│   │   ├── bootstrap.go              construct adapters, wire modules
-│   │   └── http.go                   mount module routes and infra routes
-│   ├── modules/
-│   │   ├── documents/                ─── the aggregation slice
-│   │   │   ├── api/
-│   │   │   │   └── routes.go         the module's public surface
-│   │   │   ├── app/
-│   │   │   │   ├── ports.go          DocumentSource, CacheStore
-│   │   │   │   └── use_cases/
-│   │   │   │       ├── aggregate_documents.go       fan-out, DD-2
-│   │   │   │       └── aggregate_documents_test.go  the NFR1 gate
-│   │   │   ├── domain/               no I/O
-│   │   │   │   ├── document.go       unified model (A4)
-│   │   │   │   ├── source.go         SourceName, SourceStatus
-│   │   │   │   ├── vin.go            format rule (A1)
-│   │   │   │   ├── merge.go          dedupe, deterministic sort (DD-7, DD-8)
-│   │   │   │   └── errors.go         sentinel errors
-│   │   │   ├── dto/
-│   │   │   │   └── documents_response.go   wire shape (§5.2), snake_case
-│   │   │   └── infra/
-│   │   │       ├── http/
-│   │   │       │   ├── sales_client.go        + sales_normalizer.go
-│   │   │       │   └── service_client.go      + service_normalizer.go
-│   │   │       └── persistence/
-│   │   │           └── cache_repository.go    TTL + stale (FR9, FR10)
-│   │   └── audit/                    ─── the compliance slice
-│   │       ├── app/
-│   │       │   ├── ports.go          AccessRecorder
-│   │       │   └── use_cases/
-│   │       │       └── record_access.go
-│   │       ├── domain/
-│   │       │   └── access_event.go
-│   │       └── infra/
-│   │           └── persistence/
-│   │               └── audit_repository.go    append-only (FR8, NFR8)
+│   ├── documentviewer/               viewer microservice
+│   │   ├── app/                      composition root (R6): bootstrap.go, http.go
+│   │   └── modules/
+│   │       ├── documents/            ─── the aggregation slice
+│   │       │   ├── api/
+│   │       │   │   └── routes.go     the module's public surface
+│   │       │   ├── app/
+│   │       │   │   ├── ports.go      DocumentSource, CacheStore + go:generate mockgen
+│   │       │   │   ├── mocks/        generated; do not edit by hand
+│   │       │   │   └── use_cases/
+│   │       │   │       ├── aggregate_documents.go       fan-out, DD-2
+│   │       │   │       └── aggregate_documents_test.go  the NFR1 gate
+│   │       │   ├── domain/           no I/O
+│   │       │   │   ├── document.go   unified model (A4)
+│   │       │   │   ├── source.go     SourceName, SourceStatus
+│   │       │   │   ├── vin.go        format rule (A1)
+│   │       │   │   ├── merge.go      dedupe, deterministic sort (DD-7, DD-8)
+│   │       │   │   └── errors.go     sentinel errors
+│   │       │   ├── dto/
+│   │       │   │   └── documents_response.go   wire shape (§5.2), snake_case
+│   │       │   └── infra/
+│   │       │       ├── http/
+│   │       │       │   ├── sales_client.go        + sales_normalizer.go
+│   │       │       │   └── service_client.go      + service_normalizer.go
+│   │       │       └── persistence/
+│   │       │           └── cache_repository.go    TTL + stale (FR9, FR10)
+│   │       └── audit/                ─── the compliance slice
+│   │           ├── app/
+│   │           │   ├── ports.go      AccessRecorder + go:generate mockgen
+│   │           │   ├── mocks/        generated; do not edit by hand
+│   │           │   └── use_cases/
+│   │           │       └── record_access.go
+│   │           ├── domain/
+│   │           │   └── access_event.go
+│   │           └── infra/
+│   │               └── persistence/
+│   │                   └── audit_repository.go    append-only (FR8, NFR8)
+│   ├── sales/
+│   │   ├── app/                      sales-mock composition root
+│   │   └── modules/sales/            snake_case, epoch seconds, relative URL
+│   ├── service/
+│   │   ├── app/                      service-mock composition root
+│   │   └── modules/service/          camelCase, RFC3339, nested file.uri
 │   └── shared/
 │       ├── common/
 │       │   ├── clock.go              injectable clock for TTL tests
 │       │   └── hash.go               salted VIN hashing (§8.2)
+│       ├── mockseed/                 ≥20 shared synthetic VINs (SPEC §11 Q4)
+│       ├── mockfault/                latency / error-rate / outage intercept
+│       ├── randutil/                 crypto/rand for mock generation
 │       ├── infra/
 │       │   ├── httpserver/
 │       │   │   ├── server.go  response.go  context.go
@@ -493,7 +510,10 @@ Target layout after T8. T2 holds the directories with `doc.go` stubs until each 
 │           ├── logger.go  metrics.go  tracing.go
 ├── deployments/
 │   └── docker/
-│       └── docker-compose.yaml       PostgreSQL 17 with healthcheck and named volume (A8)
+│       ├── Dockerfile                multi-stage, non-root, SERVICE build-arg
+│       ├── docker-compose.infra.yaml PostgreSQL 17 (`make infra-up`)
+│       ├── docker-compose.services.yaml  documentviewer + sales + service
+│       └── docker-compose.yaml       include both (`make stack-up`)
 ├── migrations/                       golang-migrate pairs, applied by `make migrate-up`
 ├── docs/design/                      DRAFT, SPEC, SYSTEM_DESIGN, TASKS
 ├── examples/curl.md
@@ -511,14 +531,14 @@ module-level invariant that NFR8 states directly - no update, no delete. Crucial
 runs one way: `documents` knows nothing about `audit`. The composition root wires the recorder into
 the HTTP layer, so aggregation stays testable without an audit store.
 
-**Where the rules live.** `modules/*/domain/` and `modules/documents/app/use_cases/` contain **zero
+**Where the rules live.** `modules/*/domain/` and `documentviewer/modules/documents/app/use_cases/` contain **zero
 I/O**. That is the constraint that makes the whole failure matrix runnable with fakes and no
 network, and it is where the business logic the brief asks to be validated by tests actually sits.
 
 **Why `configs/` at the root rather than `internal/config/`.** It is a normal importable package
 with a single `Load()` returning one `Config` composed of per-concern structs, with one file per
-concern. Keeping it out of `internal/` means the mock servers in `cmd/` read their ports and
-fault-injection settings through the same loader as the API, so there is exactly one place where an
+concern. The viewer binary is the only process that calls `Load()`. Mock binaries take listen
+addresses and fault flags on the command line, so there is still exactly one place where an
 environment variable is read and defaulted.
 
 ---
@@ -527,19 +547,19 @@ environment variable is read and defaulted.
 
 | Component | Responsibility | Not responsible for |
 |---|---|---|
-| **Composition root**<br/>`internal/app` | Loads `configs`, constructs every adapter, wires modules together, mounts routes, owns graceful shutdown | Any business rule. It is the only place that knows every concrete type |
+| **Composition root**<br/>`internal/<service>/app` | Loads `configs` (viewer only), constructs adapters, wires modules, mounts routes, owns graceful shutdown | Any business rule. Each binary has one root that knows its concrete types |
 | **Configuration**<br/>`configs` (root) | One `Load()` returning a `Config` of per-concern structs; every environment variable is read and defaulted here exactly once | Deciding what the values mean - consumers do that |
 | **Middleware chain**<br/>`shared/infra/httpserver/middleware` | Assigns or propagates a request ID, opens the root trace span, emits RED metrics, recovers panics into a 500, applies the whole-request deadline (NFR4) | Business rules, upstream knowledge |
-| **Documents routes**<br/>`modules/documents/api` | The module's public surface: validates the VIN (A1), calls the use case, maps the result to the wire DTO, selects the HTTP status per §5.4 | Concurrency, normalisation, cache policy |
-| **VIN validator**<br/>`modules/documents/domain` | Pure format check against one configurable rule: length and permitted alphabet (A1) | Check-digit validation, vehicle existence (out of scope) |
-| **Aggregate use case**<br/>`modules/documents/app/use_cases` | The core algorithm: cache-aside lookup, parallel fan-out with per-source deadlines (FR3, NFR2), failure isolation (NFR1), merge, deterministic sort, cache-write policy (NFR6) | Speaking HTTP or SQL - it depends only on the ports in `app/ports.go` |
-| **Sales adapter**<br/>`modules/documents/infra/http` | Calls the Sales System, maps `snake_case` fields and epoch-second timestamps into the unified model (FR5) | Deciding what happens on failure - it returns an error, the use case decides |
-| **Service adapter**<br/>`modules/documents/infra/http` | Calls the Service System, maps `camelCase` fields, RFC3339 timestamps and a nested `file` object (FR5) | As above |
-| **Cache repository**<br/>`modules/documents/infra/persistence` | TTL reads and writes, stale lookup on total failure (FR9, FR10) | The policy of *when* to write - that is the use case (NFR6) |
-| **Audit use case + repository**<br/>`modules/audit` | Records one access event per request, including rejected and failed ones (FR8); exposes no update or delete path (NFR8) | Anything on the documents request path. It is invoked by the HTTP layer, not by the aggregator |
+| **Documents routes**<br/>`documentviewer/modules/documents/api` | The module's public surface: validates the VIN (A1), calls the use case, maps the result to the wire DTO, selects the HTTP status per §5.4 | Concurrency, normalisation, cache policy |
+| **VIN validator**<br/>`documentviewer/modules/documents/domain` | Pure format check against one configurable rule: length and permitted alphabet (A1) | Check-digit validation, vehicle existence (out of scope) |
+| **Aggregate use case**<br/>`documentviewer/modules/documents/app/use_cases` | The core algorithm: cache-aside lookup, parallel fan-out with per-source deadlines (FR3, NFR2), failure isolation (NFR1), merge, deterministic sort, cache-write policy (NFR6) | Speaking HTTP or SQL - it depends only on the ports in `app/ports.go` |
+| **Sales adapter**<br/>`documentviewer/modules/documents/infra/http` | Calls the Sales System, maps `snake_case` fields and epoch-second timestamps into the unified model (FR5) | Deciding what happens on failure - it returns an error, the use case decides |
+| **Service adapter**<br/>`documentviewer/modules/documents/infra/http` | Calls the Service System, maps `camelCase` fields, RFC3339 timestamps and a nested `file` object (FR5) | As above |
+| **Cache repository**<br/>`documentviewer/modules/documents/infra/persistence` | TTL reads and writes, stale lookup on total failure (FR9, FR10) | The policy of *when* to write - that is the use case (NFR6) |
+| **Audit use case + repository**<br/>`documentviewer/modules/audit` | Records one access event per request, including rejected and failed ones (FR8); exposes no update or delete path (NFR8) | Anything on the documents request path. It is invoked by the HTTP layer, not by the aggregator |
 | **Postgres infrastructure**<br/>`shared/infra/postgres` | Connection pool and the Unit of Work that carries a transaction boundary (A8, R4). Schema is owned by `migrations/` and applied by `make migrate-up`, not by the application | Interpreting the business meaning of what it stores, and deciding transaction scope - that is the use case's job |
 | **Observability**<br/>`shared/observability` | Builds the JSON logger, registers Prometheus collectors, configures the OTel tracer and propagator (NFR5) | Deciding what is worth logging - callers pass fields |
-| **Mock servers**<br/>`cmd/mock-sales`, `cmd/mock-service` | Serve two deliberately dissimilar API shapes over real HTTP, with flags to inject latency, error rates and outages (A5) | Realism beyond payload shape and failure behaviour |
+| **Mock servers**<br/>`cmd/sales`, `cmd/service` | Serve two deliberately dissimilar API shapes over real HTTP; live chaos is success / random latency / 500 / timeout hang; structured logs use `vin_suffix` only (A5) | Realism beyond payload shape and failure behaviour |
 
 ---
 
@@ -817,7 +837,10 @@ Listed separately so additions beyond the source document are visible.
 | Namespaced IDs (DD-8) | FR4 requires clear source attribution |
 | Concrete metric and span names (§8) | NFR5 requires visibility but does not name signals |
 | Options 3-6 and the constraints K1-K6 (§2) | Method, not requirement. Options 1-2 are the author's, from DRAFT §6. K1-K6 are traced to the brief and to DRAFT requirements individually |
-| Modular layout: `modules/{documents,audit}`, `shared/`, root `configs/` (§3.3) | Code organisation, not behaviour. The `audit` split is grounded in NFR8 (append-only) being a module-level invariant, and in FR8 being invoked off the aggregation path. No requirement prescribes a directory tree |
+| Modular layout: `internal/<service>/modules/<module>`, `shared/`, root `configs/` (§3.3) | Code organisation, not behaviour. The `audit` split is grounded in NFR8 (append-only) being a module-level invariant, and in FR8 being invoked off the aggregation path. No requirement prescribes a directory tree |
+| Kept `{api,app,domain,dto,infra}` rather than `{app,domain,adapters}` | Hexagonal inbound vs outbound must stay separate (R2). `dto` keeps wire tags out of domain. Renaming folders would be a docs-only change with no behaviour |
+| `go.uber.org/mock` | Test/codegen only. `//go:generate mockgen` on `app/ports.go`; `make generate` rebuilds mocks and OpenAPI. Not a runtime import |
+| `github.com/swaggo/swag/v2` | Import of generated `api/<service>/http/docs/docs.go`. Tool stays in `./bin`; this module is only so `go test ./...` can compile the contract package |
 | Schema applied by `make migrate-up`, not `embed` on boot | A8 plus K5: the reviewer path is `make dev` (compose + migrate + mocks + API). Compiling SQL into the binary would hide the migration step from `make help` and split schema ownership away from `migrations/` |
 | `godotenv` + `google/uuid` | `Load()` reads `.env` when present; `X-Request-Id` is generated when the caller omits it. Both are small, single-purpose modules beside the four groups in §7 |
 
@@ -837,7 +860,7 @@ A8 fixes the persistence choice. The rest is derived.
 | Logging | **stdlib `log/slog`** | Structured JSON in the stdlib since 1.21. Context-aware handlers attach request and trace IDs automatically. Serves NFR5 with zero dependencies | `zerolog`/`zap`: faster, but this service is I/O-bound on upstream calls; the difference is irrelevant here |
 | Metrics | **`prometheus/client_golang`** | De-facto standard, one line to mount `/metrics`, instantly scrapeable in a demo. Serves NFR5 | OTel metrics SDK: better long-term unification, more moving parts for the same demo |
 | Tracing | **OpenTelemetry Go SDK** | Vendor-neutral. W3C propagation means a trace spans the aggregation, and the parallel fan-out becomes *visible* as sibling spans - the clearest evidence FR3 and NFR3 are met | A vendor SDK: lock-in for no gain |
-| Testing | **stdlib `testing`, table-driven, `httptest`** | Fakes satisfying `DocumentSource` make every failure mode a table row | `testify`: only `require` would be used |
+| Testing | **stdlib `testing`, table-driven, `httptest`; `mockgen` via `go.uber.org/mock`** | Ports in `app/ports.go` are generated, not hand-written. Small fakes remain allowed | `testify`: only `require` would be used |
 | Client stub | **OpenAPI 3.1 generated by `swag`, plus curl examples and a Go harness** | Satisfies the brief's "stub the client-side layer with a test harness, cURL examples, or an API contract". Generating from handler annotations means `make openapi-check` fails in CI the moment the contract drifts from the code, which a hand-written file cannot do | Hand-written YAML: one less tool, but it goes stale silently and nothing catches it |
 | Mock upstreams | **Two separate binaries** (A5) | Real HTTP across two sockets genuinely exercises NFR2 and NFR3. Separate processes let the demo kill one outright to show FR7 | One binary with two routes: fewer processes, but weaker evidence and a clumsier outage demo |
 
@@ -1068,7 +1091,7 @@ Graceful shutdown drains in-flight requests with a bounded deadline before closi
 ### 9.4 Testing strategy
 
 The brief asks for tests validating core business logic. That logic is in `modules/*/domain/` and
-`modules/documents/app/use_cases/`, all I/O-free. Tests are colocated with the code they cover, so a
+`documentviewer/modules/documents/app/use_cases/`, all I/O-free. Tests are colocated with the code they cover, so a
 module's slice carries its own proof.
 
 | Area | Cases | Covers |
@@ -1169,7 +1192,7 @@ contradicted `DRAFT.md`:
 
 | Proposed | `DRAFT.md` says | Resolution |
 |---|---|---|
-| One combined mock binary | A5: **two separate** mock API servers | Regenerated as `cmd/mock-sales` and `cmd/mock-service`. Two processes are what actually exercise NFR2, NFR3 and cancellation |
+| One combined mock binary | A5: **two separate** mock API servers | Regenerated as `cmd/sales` and `cmd/service`. Two processes are what actually exercise NFR2, NFR3 and cancellation |
 | `sizeBytes` and `mimeType` on the document model | A4 lists exactly six fields | Removed. The model carries A4's fields and nothing more |
 | camelCase JSON throughout | A4 writes `issued_at` | Whole API switched to snake_case |
 | New requirements NFR9, NFR10, NFR11 | DRAFT defines NFR1-NFR8 | Deleted. Genuine additions belong in §6.9 as derived decisions, not as invented requirements |
@@ -1269,15 +1292,15 @@ and holding it while the elaboration churns, remains the engineer's job.
 
 | ID | Where implemented | Where verified |
 |---|---|---|
-| FR1 | `documents/api/routes.go`, §5.2 | Handler tests |
-| FR2 | `documents/infra/http`, two mock servers (A5) | End-to-end test |
-| FR3 | `documents/app/use_cases`, DD-2 | Parallelism timing test; sibling spans |
-| FR4 | `documents/domain/merge.go`, DD-7, DD-8 | Merge and ordering tests |
-| FR5 | `documents/infra/http/*_normalizer.go`, §5.3 | Normalisation golden tests |
+| FR1 | `documentviewer/modules/documents/api/routes.go`, §5.2 | Handler tests |
+| FR2 | `documentviewer/modules/documents/infra/http`, two mock servers (A5) | End-to-end test |
+| FR3 | `documentviewer/modules/documents/app/use_cases`, DD-2 | Parallelism timing test; sibling spans |
+| FR4 | `documentviewer/modules/documents/domain/merge.go`, DD-7, DD-8 | Merge and ordering tests |
+| FR5 | `documentviewer/modules/documents/infra/http/*_normalizer.go`, §5.3 | Normalisation golden tests |
 | FR6 | §5.4, DD-6 | Handler test: unknown VIN returns 200 + `[]` |
 | FR7 | `sources[]` array, DD-1 | Failure matrix |
 | FR8 | `audit/` module, DD-5 | Audit written on all four outcomes |
-| FR9 | `documents/infra/persistence`, DD-4 | Cache hit test |
+| FR9 | `documentviewer/modules/documents/infra/persistence`, DD-4 | Cache hit test |
 | FR10 | §5.4 stale branch, DD-4 | Stale-served and 503 tests |
 | NFR1 | DD-2 | **Failure isolation test - the gate** |
 | NFR2 | DD-3 | Per-source deadline test |

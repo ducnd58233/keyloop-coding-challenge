@@ -79,8 +79,9 @@ Justifications and rejected alternatives: `SYSTEM_DESIGN.md` §7. A8 fixes the p
 | Config / request ID | `godotenv` (load `.env`), `google/uuid` (`X-Request-Id` when absent) |
 
 **Dependency budget.** Runtime groups in use or planned: `godotenv`, `google/uuid`, `x/sync`,
-`jackc/pgx/v5`, `prometheus/client_golang`, `go.opentelemetry.io/otel`. Adding another requires a
-decision recorded in `SYSTEM_DESIGN.md` §6.9.
+`jackc/pgx/v5`, `prometheus/client_golang`, `go.opentelemetry.io/otel`. Test/codegen only:
+`go.uber.org/mock` (mockgen output), `github.com/swaggo/swag/v2` (generated `api/<service>/http/docs`).
+Adding another requires a decision recorded in `SYSTEM_DESIGN.md` §6.9.
 
 ---
 
@@ -104,39 +105,53 @@ between machines: `golangci-lint`, `golang-migrate`, `swag`, `mockgen`.
 
 ## 5. Project structure and architectural rules
 
-Vertical slices under `internal/modules/`, cross-cutting technical concerns under `internal/shared/`,
+Vertical slices under `internal/<service>/modules/`, cross-cutting technical concerns under `internal/shared/`,
 configuration as a package at the repository root. Full annotated tree and the reasoning behind the
 module split: `SYSTEM_DESIGN.md` §3.3. This is the **target** layout; files land per `TASKS.md`
 (T2 keeps empty packages as `doc.go` stubs).
 
 ```
-api/http/docs/                     generated OpenAPI 3.1: docs.go, swagger.yaml, swagger.json
+api/<service>/http/docs/           generated OpenAPI 3.1 per binary
 cmd/
-  api/                             main.go + docs.go (swag general annotations)
-  mock-sales/                      Sales System mock, port 9100    (A5 - separate server)
-  mock-service/                    Service System mock, port 9101  (A5 - separate server)
+  documentviewer/                  viewer entry + docs.go (swag general annotations)
+  sales/                           Sales System mock, port 9100    (A5 - separate server)
+  service/                         Service System mock, port 9101  (A5 - separate server)
 configs/                           package configs - repository root, not internal
   config.go  env.go  http.go  sources.go  cache.go  database.go  log.go
 internal/
-  app/                             composition root: bootstrap.go, http.go
-  modules/
-    documents/                     aggregation slice
-      api/                         routes.go - the module's public surface
-      app/                         ports.go + use_cases/
-      domain/                      document, source, vin, merge, errors    (no I/O)
-      dto/                         wire shapes, snake_case
-      infra/http/                  Sales + Service clients and normalisers
-      infra/persistence/           cache repository (document_cache only, R3)
-    audit/                         compliance slice
-      app/                         ports.go + use_cases/
-      domain/                      access_event
-      infra/persistence/           append-only audit repository (search_audit only, R3)
+  documentviewer/
+    app/                           viewer composition root (R6)
+    modules/
+      documents/                   aggregation slice
+        api/                       routes.go - the module's public surface
+        app/                       ports.go + use_cases/ + mocks/ (mockgen)
+        domain/                    document, source, vin, merge, errors    (no I/O)
+        dto/                       wire shapes, snake_case
+        infra/http/                Sales + Service clients and normalisers
+        infra/persistence/         cache repository (document_cache only, R3)
+      audit/                       compliance slice
+        app/                       ports.go + use_cases/ + mocks/ (mockgen)
+        domain/                    access_event
+        infra/persistence/         append-only audit repository (search_audit only, R3)
+  sales/
+    app/                           sales-mock composition root
+    modules/sales/                 snake_case + epoch payloads (A5)
+  service/
+    app/                           service-mock composition root
+    modules/service/               camelCase + RFC3339 payloads (A5)
   shared/
     common/                        clock, salted hashing
+    mockseed/                      shared synthetic VINs (SPEC §11 Q4)
+    mockfault/                     latency / error-rate / outage intercept
+    randutil/                      crypto/rand helpers for mock generation
     infra/httpserver/              server.go, response.go, context.go, middleware/
     infra/postgres/                pgxpool connection, Unit of Work (R4)
     observability/                 logger, metrics, tracing
-deployments/docker/docker-compose.yaml   PostgreSQL 17, healthcheck, named volume (A8)
+deployments/docker/
+  Dockerfile                       multi-stage, non-root, SERVICE build-arg
+  docker-compose.infra.yaml        PostgreSQL 17 (A8)
+  docker-compose.services.yaml     documentviewer + sales + service
+  docker-compose.yaml              include infra + services (`make stack-up`)
 migrations/                        golang-migrate pairs, applied by `make migrate-up`
 bin/                               tools installed by `make tools` (gitignored)
 docs/design/                       DRAFT.md, SPEC.md, SYSTEM_DESIGN.md, TASKS.md
@@ -148,20 +163,24 @@ AGENTS.md
 README.md
 ```
 
+**`api` / `infra` are hexagonal adapters, not a missing `adapters/` folder.** Driving (HTTP) stays in
+`api`; driven (SQL, upstream clients) stays in `infra`. Collapsing them into
+`<module>/{app,domain,adapters}` would mix inbound and outbound I/O in one package and break R2.
+
 **Three binaries, not two.** A5 specifies two separate mock servers; each gets its own `cmd/` entry.
 
 **Two modules, not one.** `audit` is a separate bounded context with its own invariant (NFR8:
 append-only) and no dependency from `documents`. A single module would make `modules/` decorative.
 
-**`modules/*/domain/` and `modules/documents/app/use_cases/` contain zero I/O.** That constraint is
+**`modules/*/domain/` and `documentviewer/modules/documents/app/use_cases/` contain zero I/O.** That constraint is
 what makes the failure matrix in §7 testable without a network, and it is where the business logic
 the brief asks to be validated by tests actually lives. Tests are colocated with the code they cover.
 
 ### 5.1 Architectural rules
 
 Six rules govern how these packages may depend on each other: modules interact only through ports,
-one repository per table, transactions owned by the use case, no SQL above `infra`, and a single
-composition root. They are **enforcement rules rather than design rationale**, so they live in
+one repository per table, transactions owned by the use case, no SQL above `infra`, and one
+composition root per binary. They are **enforcement rules rather than design rationale**, so they live in
 [`AGENTS.md`](../../AGENTS.md) next to the code, not here. Referenced throughout as **R1**-**R6**.
 
 ---
@@ -190,9 +209,11 @@ func Load() (Config, error)   // godotenv.Load() then the environment
 file is present. A missing `.env` is not an error. Copy `.env.example` to `.env` for local
 overrides; `.env` is gitignored.
 
-Being outside `internal/` is deliberate: `cmd/mock-sales` and `cmd/mock-service` load their ports
-and fault-injection settings through the same loader as `cmd/api`, so all three binaries share one
-definition of every variable and its default.
+Being outside `internal/` is deliberate: `cmd/documentviewer` loads upstream URLs and timeouts here.
+`cmd/sales` and `cmd/service` do **not** read fault injection from the environment;
+live chaos (success / random latency / 500 / timeout hang, extra documents) is process
+behaviour, overridable with `-down` and `-deterministic`. Each mock logs `vin_suffix`,
+`fault`, `latency`, and record counts — never the full VIN.
 
 Safe defaults throughout, so `make dev` works with nothing set.
 
@@ -209,9 +230,6 @@ Safe defaults throughout, so `make dev` works with nothing set.
 | `DB_MAX_CONNS` | `10` | `database.go` | Pool ceiling; see SYSTEM_DESIGN §9.2 |
 | `VIN_HASH_SALT` | `dev-only-not-a-secret` | `log.go` | **Secret in production.** Never logged. See §8 |
 | `LOG_LEVEL` | `info` | `log.go` | |
-| `MOCK_LATENCY_MS` | `0` | `sources.go` | Fault injection for the mock servers (T3) |
-| `MOCK_ERROR_RATE` | `0` | `sources.go` | |
-| `MOCK_DOWN` | `false` | `sources.go` | |
 
 `Load()` **fails fast** if the timeout ordering is violated. An inverted budget is a silent bug: the
 outer layer fires first and the service loses the ability to report which dependency was slow
@@ -305,7 +323,7 @@ a scoping choice.
 
 Two things contain it. A1 is stated as a simplification with the production form named, so the
 reader sees a decision rather than a gap. And the validator is built as one configurable rule over
-length and alphabet, so `modules/documents/domain/vin.go` moves to the ISO form by changing a constant and a character
+length and alphabet, so `documentviewer/modules/documents/domain/vin.go` moves to the ISO form by changing a constant and a character
 set - no logic change, no test rewrite.
 
 **Reversing this costs one line plus a test-table update.**
