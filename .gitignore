@@ -22,9 +22,6 @@ logs/
 
 # Agent runtime state
 /.agent-state/
-.cursor/hooks/__pycache__/
-**/__pycache__/
-*.py[cod]
 
 # OS
 .DS_Store

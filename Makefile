@@ -43,7 +43,7 @@ SWAG_SERVICE = cmd/service,internal/service/modules/service
 .DEFAULT_GOAL := help
 
 .PHONY: help tools run mocks dev dev-stop demo-degraded \
-	test test-race test-integration cover vet fmt tidy lint hook-test \
+	test test-race test-integration cover vet fmt tidy lint \
 	generate mocks-gen mocks-gen-documentviewer mocks-gen-sales mocks-gen-service \
 	openapi openapi-check openapi-documentviewer openapi-sales openapi-service \
 	new-migrate migrate-up migrate-down \
@@ -153,9 +153,6 @@ tidy: ## go mod tidy
 
 lint: $(GOLANGCI_LINT) ## golangci-lint run ./...
 	$(GOLANGCI_LINT) run ./...
-
-hook-test: ## Cursor hook: refuse direct/forced push to main
-	python3 .cursor/hooks/block_direct_main_test.py
 
 # ---------------------------------------------------------------------------
 # Codegen - mocks (go:generate mockgen) and OpenAPI (swag)

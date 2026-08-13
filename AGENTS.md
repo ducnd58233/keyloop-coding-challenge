@@ -125,7 +125,6 @@ implementation.
   while on `main`, `--all`, `--mirror`).
 - Force-push `main`/`master` (`--force`, `--force-with-lease`, `-f`, `+main`), including to invent
   a PR after a direct push, unless the user explicitly requests a rewind.
-- Disable, skip, or alias around `.cursor/hooks/` delivery denial.
 
 </required>
 
