@@ -2,24 +2,31 @@ package app
 
 import (
 	"net/http"
+	"time"
 
+	docsapi "github.com/ducnd58233/unified-document-viewer/internal/documentviewer/modules/documents/api"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/httpserver"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/infra/httpserver/middleware"
 	"github.com/ducnd58233/unified-document-viewer/internal/shared/observability"
 )
 
 type httpDeps struct {
-	log observability.Logger
+	log            observability.Logger
+	docs           *docsapi.Handler
+	requestTimeout time.Duration
 }
 
-// T6 mounts document routes here; until then only liveness is exposed.
 func mountHTTP(d httpDeps) http.Handler {
 	mux := http.NewServeMux()
 	registerHealth(mux)
+	if d.docs != nil {
+		d.docs.Register(mux)
+	}
 
 	return middleware.Chain(
 		mux,
 		middleware.RequestID,
+		middleware.Timeout(d.requestTimeout),
 		middleware.Recover(d.log),
 	)
 }

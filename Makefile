@@ -32,20 +32,26 @@ SWAG=$(TOOLS_DIR)/swag$(EXE)
 DOCKER_IMAGE ?= $(APP):local
 VERSION ?= dev
 
+# cmd/<name>/ is the service list. Override: make SERVICES="sales service documentviewer"
+empty :=
+space := $(empty) $(empty)
+SERVICES ?= $(notdir $(patsubst %/,%,$(wildcard cmd/*/)))
+VIEWER ?= documentviewer
+MOCKS ?= $(filter-out $(VIEWER),$(SERVICES))
+DEVSTOP_REGEX = $(subst $(space),|,$(SERVICES))|mock-sales|mock-service|api
+
 # Ports for the two mock upstreams (A5 - separate servers)
 SALES_ADDR ?= :9100
 SERVICE_ADDR ?= :9101
-
-SWAG_DOCUMENTVIEWER = cmd/documentviewer,internal/documentviewer/modules/documents/api,internal/shared/infra/httpserver
-SWAG_SALES = cmd/sales,internal/sales/modules/sales
-SWAG_SERVICE = cmd/service,internal/service/modules/service
+ADDR_sales ?= $(SALES_ADDR)
+ADDR_service ?= $(SERVICE_ADDR)
+DEMO_DOWN ?= service
 
 .DEFAULT_GOAL := help
 
 .PHONY: help tools run mocks dev dev-stop demo-degraded \
 	test test-race test-integration cover vet fmt tidy lint \
-	generate mocks-gen mocks-gen-documentviewer mocks-gen-sales mocks-gen-service \
-	openapi openapi-check openapi-documentviewer openapi-sales openapi-service \
+	generate mocks-gen openapi openapi-check \
 	new-migrate migrate-up migrate-down \
 	infra-up infra-down stack-up stack-down \
 	db-up db-down db-reset build clean
@@ -85,42 +91,37 @@ run: ## Run the document-viewer API alone (expects db + mocks already up)
 
 # Built binaries (not `go run`) so Ctrl+C / trap hits the listener, not a wrapper
 # that leaves the compiled exe bound on Windows.
-# Both mock upstreams, foreground. Use a second terminal, or use `make dev`.
-mocks: build ## Run both mock upstreams until Ctrl+C
+# Mock upstreams, foreground. Use a second terminal, or use `make dev`.
+mocks: build ## Run mock upstreams until Ctrl+C
 	@pids=""; \
 	cleanup() { for pid in $$pids; do kill -TERM $$pid 2>/dev/null || true; done; wait 2>/dev/null || true; }; \
 	trap cleanup INT TERM EXIT; \
-	./bin/sales$(EXE) -addr $(SALES_ADDR) & pids="$$pids $$!"; \
-	./bin/service$(EXE) -addr $(SERVICE_ADDR) & pids="$$pids $$!"; \
+	$(foreach s,$(MOCKS),./bin/$(s)$(EXE) -addr $(ADDR_$(s)) & pids="$$pids $$!";) \
 	wait $$pids
 
 # The one command a reviewer needs: database, schema, mocks, API.
-dev: infra-up migrate-up build ## db + migrations + both mocks + API. Ctrl+C stops all three
+dev: infra-up migrate-up build ## db + migrations + mocks + API. Ctrl+C stops every cmd/ binary
 	@pids=""; \
 	cleanup() { for pid in $$pids; do kill -TERM $$pid 2>/dev/null || true; done; wait 2>/dev/null || true; }; \
 	trap cleanup INT TERM EXIT; \
-	./bin/sales$(EXE) -addr $(SALES_ADDR) & pids="$$pids $$!"; \
-	./bin/service$(EXE) -addr $(SERVICE_ADDR) & pids="$$pids $$!"; \
-	./bin/documentviewer$(EXE) & pids="$$pids $$!"; \
+	$(foreach s,$(MOCKS),./bin/$(s)$(EXE) -addr $(ADDR_$(s)) & pids="$$pids $$!";) \
+	./bin/$(VIEWER)$(EXE) & pids="$$pids $$!"; \
 	wait $$pids
 
-# Same, with the Service upstream forced down, to demonstrate FR7 partial results.
-demo-degraded: infra-up migrate-up build ## Same as dev but with the Service upstream down (demonstrates FR7)
+# Same, with DEMO_DOWN forced down, to demonstrate FR7 partial results.
+demo-degraded: infra-up migrate-up build ## Same as dev but DEMO_DOWN (default service) is -down (FR7)
 	@pids=""; \
 	cleanup() { for pid in $$pids; do kill -TERM $$pid 2>/dev/null || true; done; wait 2>/dev/null || true; }; \
 	trap cleanup INT TERM EXIT; \
-	./bin/sales$(EXE) -addr $(SALES_ADDR) & pids="$$pids $$!"; \
-	./bin/service$(EXE) -addr $(SERVICE_ADDR) -down & pids="$$pids $$!"; \
-	./bin/documentviewer$(EXE) & pids="$$pids $$!"; \
+	$(foreach s,$(MOCKS),./bin/$(s)$(EXE) -addr $(ADDR_$(s)) $(if $(filter $(s),$(DEMO_DOWN)),-down) & pids="$$pids $$!";) \
+	./bin/$(VIEWER)$(EXE) & pids="$$pids $$!"; \
 	wait $$pids
 
-dev-stop: ## Kill leftover sales/service/documentviewer (and old mock-*) processes
+dev-stop: ## Kill leftover cmd/ binaries (and old mock-* names)
 ifeq ($(OS),Windows_NT)
-	@powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $$_.Name -match '^(sales|service|documentviewer|mock-sales|mock-service|api)\.exe$$' } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue }"
+	@powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $$_.Name -match '^($(DEVSTOP_REGEX))\.exe$$' } | ForEach-Object { Stop-Process -Id $$_.ProcessId -Force -ErrorAction SilentlyContinue }"
 else
-	-@pkill -TERM -x sales$(EXE) || true
-	-@pkill -TERM -x service$(EXE) || true
-	-@pkill -TERM -x documentviewer$(EXE) || true
+	@for s in $(SERVICES); do pkill -TERM -x $$s$(EXE) || true; done
 endif
 
 # ---------------------------------------------------------------------------
@@ -160,39 +161,31 @@ lint: $(GOLANGCI_LINT) ## golangci-lint run ./...
 
 generate: mocks-gen openapi ## Generate everything: mockgen mocks + OpenAPI docs
 
-mocks-gen: mocks-gen-documentviewer mocks-gen-sales mocks-gen-service ## Run go:generate mockgen per microservice
-
-mocks-gen-documentviewer: $(MOCKGEN) ## mockgen for documentviewer modules
-	GOTOOLCHAIN=$(GOTOOLCHAIN) $(GO) generate ./internal/documentviewer/...
-
-mocks-gen-sales: $(MOCKGEN) ## mockgen for sales modules (no-op until ports grow)
-	GOTOOLCHAIN=$(GOTOOLCHAIN) $(GO) generate ./internal/sales/...
-
-mocks-gen-service: $(MOCKGEN) ## mockgen for service modules (no-op until ports grow)
-	GOTOOLCHAIN=$(GOTOOLCHAIN) $(GO) generate ./internal/service/...
+mocks-gen: $(MOCKGEN) ## go:generate mockgen for every cmd/ service
+	@for s in $(SERVICES); do \
+		GOTOOLCHAIN=$(GOTOOLCHAIN) $(GO) generate ./internal/$$s/...; \
+	done
 
 # ---------------------------------------------------------------------------
 # OpenAPI - annotations become api/<service>/http/docs/{docs.go,swagger.yaml,swagger.json}
 # ---------------------------------------------------------------------------
 
-openapi: openapi-documentviewer openapi-sales openapi-service ## Regenerate all service OpenAPI contracts
-
-openapi-documentviewer: $(SWAG) ## Regenerate api/documentviewer/http/docs
-	$(SWAG) init --v3.1 -g docs.go -d $(SWAG_DOCUMENTVIEWER) -o ./api/documentviewer/http/docs --outputTypes go,yaml,json
-
-openapi-sales: $(SWAG) ## Regenerate api/sales/http/docs
-	$(SWAG) init --v3.1 -g docs.go -d $(SWAG_SALES) -o ./api/sales/http/docs --outputTypes go,yaml,json
-
-openapi-service: $(SWAG) ## Regenerate api/service/http/docs
-	$(SWAG) init --v3.1 -g docs.go -d $(SWAG_SERVICE) -o ./api/service/http/docs --outputTypes go,yaml,json
+openapi: $(SWAG) ## Regenerate OpenAPI contracts for every cmd/ service
+	@for s in $(SERVICES); do \
+		$(SWAG) init --v3.1 -g docs.go \
+			-d cmd/$$s,internal/$$s \
+			-o ./api/$$s/http/docs --outputTypes go,yaml,json; \
+	done
 
 # CI gate: fails if the committed contract has drifted from the handlers.
 openapi-check: openapi ## Fail if any committed contract has drifted from the code
-	@git diff --exit-code -- \
-		api/documentviewer/http/docs/docs.go api/documentviewer/http/docs/swagger.yaml api/documentviewer/http/docs/swagger.json \
-		api/sales/http/docs/docs.go api/sales/http/docs/swagger.yaml api/sales/http/docs/swagger.json \
-		api/service/http/docs/docs.go api/service/http/docs/swagger.yaml api/service/http/docs/swagger.json \
-		|| (echo "openapi out of date; run make openapi and commit" && exit 1)
+	@fail=0; \
+	for s in $(SERVICES); do \
+		git diff --exit-code -- \
+			api/$$s/http/docs/docs.go api/$$s/http/docs/swagger.yaml api/$$s/http/docs/swagger.json \
+			|| fail=1; \
+	done; \
+	if [ $$fail -ne 0 ]; then echo "openapi out of date; run make openapi and commit" && exit 1; fi
 
 # ---------------------------------------------------------------------------
 # Database migrations
@@ -240,10 +233,11 @@ db-reset: ## Stop PostgreSQL, drop the volume, start clean
 # Build
 # ---------------------------------------------------------------------------
 
-build: ## Build all three binaries into ./bin
-	$(GO) build -ldflags "-X main.version=$(VERSION)" -o bin/documentviewer$(EXE) ./cmd/documentviewer
-	$(GO) build -o bin/sales$(EXE) ./cmd/sales
-	$(GO) build -o bin/service$(EXE) ./cmd/service
+build: ## Build every cmd/ binary into ./bin
+	@mkdir -p bin
+	@for s in $(SERVICES); do \
+		$(GO) build -ldflags "-X main.version=$(VERSION)" -o bin/$$s$(EXE) ./cmd/$$s; \
+	done
 
 clean: ## Remove ./bin and coverage output
 	rm -rf bin coverage.out

@@ -21,7 +21,9 @@ const (
 
 // SourceReport is FR7 per-source status on every aggregate.
 type SourceReport struct {
-	Name      SourceName
-	Status    SourceStatus
-	ErrorCode string
+	Name          SourceName
+	Status        SourceStatus
+	ErrorCode     string
+	LatencyMs     int
+	DocumentCount int
 }

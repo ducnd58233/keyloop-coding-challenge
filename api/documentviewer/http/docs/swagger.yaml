@@ -1,4 +1,75 @@
-components: {}
+components:
+  schemas:
+    dto.Document:
+      properties:
+        id:
+          type: string
+        issued_at:
+          type: string
+        source:
+          type: string
+        title:
+          type: string
+        type:
+          type: string
+        url:
+          type: string
+      type: object
+    dto.DocumentsResponse:
+      properties:
+        documents:
+          items:
+            $ref: '#/components/schemas/dto.Document'
+          type: array
+          uniqueItems: false
+        partial:
+          type: boolean
+        request_id:
+          type: string
+        served_from_cache:
+          type: boolean
+        sources:
+          items:
+            $ref: '#/components/schemas/dto.Source'
+          type: array
+          uniqueItems: false
+        stale:
+          type: boolean
+        vin:
+          type: string
+      type: object
+    dto.ErrorBody:
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      type: object
+    dto.ErrorResponse:
+      properties:
+        error:
+          $ref: '#/components/schemas/dto.ErrorBody'
+      type: object
+    dto.Source:
+      properties:
+        document_count:
+          type: integer
+        error:
+          $ref: '#/components/schemas/dto.SourceError'
+        latency_ms:
+          type: integer
+        name:
+          type: string
+        status:
+          type: string
+      type: object
+    dto.SourceError:
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      type: object
 externalDocs:
   description: ""
   url: ""
@@ -8,6 +79,45 @@ info:
   title: Unified Document Viewer API
   version: 0.1.0
 openapi: 3.1.0
-paths: {}
+paths:
+  /vehicles/{vin}/documents:
+    get:
+      parameters:
+      - description: Vehicle identification number
+        in: path
+        name: vin
+        required: true
+        schema:
+          type: string
+      - description: Actor recorded on the audit trail
+        in: header
+        name: X-Actor-Id
+        schema:
+          type: string
+      - description: Caller correlation id
+        in: header
+        name: X-Request-Id
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dto.DocumentsResponse'
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dto.ErrorResponse'
+          description: Bad Request
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/dto.ErrorResponse'
+          description: Service Unavailable
+      summary: List documents for a VIN
 servers:
 - url: /api/v1

@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -38,5 +40,25 @@ func TestRecoverMapsPanicToInternalError(t *testing.T) {
 	}
 	if payload.Error.Code != "INTERNAL_ERROR" {
 		t.Fatalf("code = %q, want INTERNAL_ERROR", payload.Error.Code)
+	}
+}
+
+func TestRecoverLogOmitsPanicVIN(t *testing.T) {
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, nil))
+	h := Recover(log)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("1HGCM82633")
+	}))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	out := buf.String()
+	if strings.Contains(out, "1HGCM82633") {
+		t.Fatalf("panic value leaked into log: %s", out)
+	}
+	if !strings.Contains(out, "panic_type") {
+		t.Fatalf("want panic_type, got %s", out)
 	}
 }
