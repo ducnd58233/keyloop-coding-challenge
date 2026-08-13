@@ -85,6 +85,8 @@ change to swap an implementation.
 - Regenerate and commit the contract when a handler or DTO changes (`make openapi`).
 - Write an audit record for every request, including rejected and failed ones (FR8).
 - Return the `sources[]` per-source status array on every aggregate response (FR7).
+- Run commands through their real CLI — `make <target>` when one exists (`make help` lists them),
+  the tool's own CLI otherwise.
 
 **Ask first**
 
@@ -103,6 +105,9 @@ change to swap an implementation.
   return `nil` from the goroutine instead.
 - Add an update or delete path to the audit store (NFR8). It is append-only.
 - Commit a credential or a populated database volume.
+- Hand-type or recall a command from memory when a CLI can produce or verify it. Flags and syntax
+  drift between tool versions; `make help` and the tool's own `--help` are authoritative, memory
+  is not.
 
 ## Before you write the aggregator
 
