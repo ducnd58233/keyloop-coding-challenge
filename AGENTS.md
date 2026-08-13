@@ -97,6 +97,9 @@ implementation.
 - Run commands through their real CLI. `make <target>` when one exists (`make help` lists them),
   the tool's own CLI otherwise.
 - Log listen/start only after bind succeeds.
+- Land work on a task branch. The only path onto `main` is `gh pr create` on origin, then
+  `gh pr merge`. After merge, `git checkout main && git pull`. "merge", "ship", or `/vibe-ship`
+  GO is not permission to update `main` directly.
 
 ## Never
 
@@ -118,6 +121,10 @@ implementation.
 - Add a `Co-authored-by` line or any AI trailer to a commit.
 - Call `os.Exit` while a logger, DB, or listener still needs `Close`. The composition root `defer`s
   Close; `os.Exit` skips that.
+- Push commits directly to `main` or `master` (`git push origin main`, `HEAD:main`, `git push`
+  while on `main`, `--all`, `--mirror`).
+- Force-push `main`/`master` (`--force`, `--force-with-lease`, `-f`, `+main`), including to invent
+  a PR after a direct push, unless the user explicitly requests a rewind.
 
 </required>
 
@@ -152,10 +159,24 @@ implementation.
 
 ## Ask first
 
-- Any `git commit`, push, branch deletion or pull request.
+- Any `git commit`, feature-branch push, or branch deletion, unless the user already authorized
+  that ship in this conversation.
 - Adding a dependency, or any exception to R1-R6.
 - Editing `docs/design/DRAFT.md` - it is the source of truth, not a working file.
 - Changing the public API contract once `api/<service>/http/docs/` exists.
+
+## Main only via PR
+
+Do not ask whether to skip the PR. Create it on origin (`gh pr create`), then merge it
+(`gh pr merge`). Fast-forwarding local `main` and pushing, or force-pushing `main` to attach a
+PR after the fact, is a workflow violation even when the user said "merge and push".
+
+## Harness
+
+This file is the in-repo delivery harness. Do not add Cursor hooks, git hooks, or Make targets to
+refuse `git push`. If origin later supports GitHub branch protection (require a pull request, deny
+force-push to `main`), enable that on origin; private GitHub Free cannot. Optional vibe-agent
+`merge_approved` stays out of tree and is not required here.
 
 </escalation>
 
@@ -171,6 +192,9 @@ These compiled, or the happy path stayed green. Do not reintroduce them.
 - **`math/rand` + `//nolint:gosec`** instead of `randutil`.
 - **mockgen / `Capture` for `Logger`** cannot assert redaction. Use a slog text buffer.
 - **`http server started` before `Listen`** reported a bound port that never accepted.
+- **Direct `git push origin main` after ship GO** skipped the PR. Repair was rewind + PR #1.
+  `gh pr create` then `gh pr merge`.
+- **`--force-with-lease` on `main`** to attach a PR retroactively. Still a force-push to main.
 
 ## Before you write the aggregator
 
