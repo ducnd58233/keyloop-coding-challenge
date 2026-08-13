@@ -1,0 +1,31 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - bodyclose       # every HTTP response body is closed - two upstream clients per request
+    - contextcheck    # a dropped context breaks the per-source timeout budget (NFR2)
+    - errorlint       # errors compared with == instead of errors.Is
+    - gosec
+    - misspell
+    - noctx           # an HTTP call without a context cannot honour a deadline
+    - revive
+    - sqlclosecheck   # rows left open exhaust the pool
+    - unconvert
+    - wastedassign
+  exclusions:
+    rules:
+      # Test files may hard-code fixtures and skip error wrapping.
+      - path: _test\.go
+        linters:
+          - gosec
+          - noctx
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
